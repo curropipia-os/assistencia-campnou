@@ -130,6 +130,8 @@
   .mode-btn span{font-size:11.5px;color:var(--muted);line-height:1.35}
   .mode-btn:hover{border-color:var(--sea-bright)}
   .mode-btn.on{border-color:var(--grana);background:#fdf0f3;box-shadow:0 0 0 1px var(--grana) inset}
+  .seat-select{padding:5px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-weight:700;background:#fff;cursor:pointer;font-family:inherit;max-width:110px}
+  .seat-select:focus{outline:2px solid var(--sea-bright);outline-offset:-1px}
   .cat-legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
   .cat-count{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:8px;font-size:12.5px;font-weight:600;border:1px solid var(--line)}
   .cat-count b{font-variant-numeric:tabular-nums;font-size:14px}
@@ -243,6 +245,7 @@
 
   <section id="tableSection" class="card hidden">
     <div class="step-label"><span class="step-num">3</span> Repartiment partit a partit</div>
+    <p class="hint" style="margin-top:0">Pots canviar qui va a cada partit amb els desplegables (per exemple si algú no pot anar-hi un cap de setmana). El saldo de sota s'actualitza sol i es desa al núvol. Els partits modificats es marquen en groc.</p>
     <div class="legend">
       <span><span class="dot" style="background:var(--p1)"></span><b id="lg0">P1</b></span>
       <span><span class="dot" style="background:var(--p2)"></span><b id="lg1">P2</b></span>
@@ -341,6 +344,9 @@ const SOCI = 125;
 const COLORS = ['var(--p1)','var(--p2)','var(--p3)','var(--p4)'];
 let names = [];
 let order = [];
+// originalAssign = the pure draw result (baseline for debt); currentAssign = after manual edits
+let originalAssign = null;
+let currentAssign = null;
 // blocks[matchIdx] = Set of person indices who CANNOT attend that match
 let blocks = {};
 // current draw mode: 'regular' | 'champions' | 'copa'
@@ -507,37 +513,107 @@ function distribute(){
   return assign;
 }
 
-function render(assign){
-  // table
+// Render the results. `assign` is the current (possibly manually edited) assignment.
+// If it's a fresh draw, we also snapshot it as the baseline (originalAssign).
+function render(assign, isFreshDraw){
+  currentAssign = assign;
+  if(isFreshDraw){
+    // deep copy as the immutable baseline for debt calculation
+    originalAssign = assign.map(a=>({idx:a.idx, s1:a.s1, s2:a.s2}));
+  }
+  renderTable();
+  renderBalance();
+  document.getElementById('tableSection').classList.remove('hidden');
+  document.getElementById('balanceSection').classList.remove('hidden');
+}
+
+// dropdown for a seat, marking manual changes
+function seatSelect(matchIdx, seatNum, current){
+  let opts='';
+  for(let p=0;p<4;p++){
+    opts+=`<option value="${p}" ${p===current?'selected':''}>${names[p]}</option>`;
+  }
+  return `<select class="seat-select" data-match="${matchIdx}" data-seat="${seatNum}"
+            style="border-left:4px solid ${COLORS[current]}">${opts}</select>`;
+}
+
+function renderTable(){
   const body=document.getElementById('matchBody');
   body.innerHTML='';
-  // keep catalogue order for display, but only show matches in this draw
-  const byIdx={}; assign.forEach(a=>byIdx[a.idx]=a);
+  const byIdx={}; currentAssign.forEach(a=>byIdx[a.idx]=a);
+  const origByIdx={}; (originalAssign||[]).forEach(a=>origByIdx[a.idx]=a);
   MATCHES.forEach((m,i)=>{
     const a=byIdx[i];
-    if(!a) return; // not part of the current mode's draw
+    if(!a) return;
+    const orig=origByIdx[i];
+    const changed = orig && (
+      [a.s1,a.s2].sort().join('-') !== [orig.s1,orig.s2].sort().join('-')
+    );
     const tr=document.createElement('tr');
+    if(changed) tr.style.background='#fff8e8';
     tr.innerHTML=`
       <td style="font-size:12px;color:var(--muted)">${m.jor}</td>
-      <td><b>${m.part}</b>${m.data!=='—'?`<br><span style="font-size:11px;color:var(--muted)">${m.data}</span>`:''}</td>
+      <td><b>${m.part}</b>${m.data!=='—'?`<br><span style="font-size:11px;color:var(--muted)">${m.data}</span>`:''}${changed?'<br><span style="font-size:10px;color:var(--sand);font-weight:700">✎ CANVIAT</span>':''}</td>
       <td class="hide-m"><span class="cat-pill ${catClass(m.cat)}">${m.cat}</span></td>
       <td class="preu">${m.preu.toFixed(2)} €</td>
-      <td><span class="seat" style="background:${COLORS[a.s1]}">${names[a.s1]}</span></td>
-      <td><span class="seat" style="background:${COLORS[a.s2]}">${names[a.s2]}</span></td>`;
+      <td>${seatSelect(i,1,a.s1)}</td>
+      <td>${seatSelect(i,2,a.s2)}</td>`;
     body.appendChild(tr);
   });
-  document.getElementById('tableSection').classList.remove('hidden');
+  // wire up the selects
+  body.querySelectorAll('.seat-select').forEach(sel=>{
+    sel.addEventListener('change',()=>onSeatChange(sel));
+  });
+}
 
-  // balance
+function onSeatChange(sel){
+  const mi=+sel.dataset.match, seat=+sel.dataset.seat, val=+sel.value;
+  const a=currentAssign.find(x=>x.idx===mi);
+  if(!a) return;
+  // prevent the same person in both seats
+  const other = seat===1 ? a.s2 : a.s1;
+  if(val===other){
+    alert('No pots posar la mateixa persona als dos seients del mateix partit.');
+    renderTable();
+    return;
+  }
+  if(seat===1) a.s1=val; else a.s2=val;
+  renderTable();
+  renderBalance();
+  saveDraw(currentAssign); // persist the manual change to the cloud
+}
+
+function renderBalance(){
+  // current (real) balance
   const stat=[0,1,2,3].map(()=>({n:0,val:0}));
-  assign.forEach(a=>{
+  currentAssign.forEach(a=>{
     stat[a.s1].n++; stat[a.s1].val+=a.preu/2;
     stat[a.s2].n++; stat[a.s2].val+=a.preu/2;
   });
+  // original balance (what the draw said each should pay) for debt
+  const origVal=[0,0,0,0];
+  (originalAssign||[]).forEach(a=>{
+    const m=MATCHES[a.idx];
+    origVal[a.s1]+=m.preu/2; origVal[a.s2]+=m.preu/2;
+  });
+  const anyChange = originalAssign && JSON.stringify(originalAssign.map(a=>[a.idx,a.s1,a.s2]))
+                    !== JSON.stringify(currentAssign.map(a=>[a.idx,a.s1,a.s2]));
+
   const cards=document.getElementById('balanceCards');
   cards.innerHTML='';
   stat.forEach((s,i)=>{
     const total=s.val+SOCI;
+    // debt: positive = has paid MORE than the draw assigned (others owe them);
+    //       negative = has paid LESS (they owe others)
+    const debt = s.val - origVal[i];
+    let debtHtml='';
+    if(anyChange){
+      const sign = debt>0.005 ? '+' : (debt<-0.005 ? '−' : '');
+      const col = debt>0.005 ? '#1a7a4c' : (debt<-0.005 ? 'var(--grana)' : 'var(--muted)');
+      const txt = Math.abs(debt)<0.005 ? 'en paus' : sign+Math.abs(debt).toFixed(2)+' €';
+      debtHtml=`<div class="bstat" style="border-top:1px dashed var(--line);margin-top:4px;padding-top:4px">
+        <span>Saldo vs sorteig</span><span class="v" style="color:${col}">${txt}</span></div>`;
+    }
     const d=document.createElement('div');
     d.className='bcard p'+i;
     d.innerHTML=`
@@ -545,18 +621,19 @@ function render(assign){
       <div class="bstat"><span>Partits</span><span class="v">${s.n}</span></div>
       <div class="bstat"><span>Valor partits</span><span class="v">${s.val.toFixed(2)} €</span></div>
       <div class="bstat"><span>Carnet soci</span><span class="v">${SOCI.toFixed(2)} €</span></div>
-      <div class="bstat btotal"><span>TOTAL a pagar</span><span class="v">${total.toFixed(2)} €</span></div>`;
+      <div class="bstat btotal"><span>TOTAL a pagar</span><span class="v">${total.toFixed(2)} €</span></div>
+      ${debtHtml}`;
     cards.appendChild(d);
   });
   const vals=stat.map(s=>s.val);
   const dev=Math.max(...vals)-Math.min(...vals);
   const bar=document.getElementById('devBar');
   let cls='dev-good',msg='Repartiment molt equilibrat';
-  if(dev>30){cls='dev-bad';msg='Desequilibrat — repeteix el sorteig o ajusta manualment';}
+  if(dev>30){cls='dev-bad';msg='Desequilibrat — ajusta o compensa amb un altre partit';}
   else if(dev>15){cls='dev-mid';msg='Acceptable — es pot afinar';}
   bar.className='devbar '+cls;
-  bar.innerHTML=`<span>${msg}</span><span>Desviació màx.: <span class="dev-val">${dev.toFixed(2)} €</span></span>`;
-  document.getElementById('balanceSection').classList.remove('hidden');
+  let debtNote = anyChange ? ' · saldo per canvis manuals actiu' : '';
+  bar.innerHTML=`<span>${msg}${debtNote}</span><span>Desviació màx.: <span class="dev-val">${dev.toFixed(2)} €</span></span>`;
 }
 
 let hasSavedDraw = {regular:false, champions:false, copa:false};
@@ -609,7 +686,7 @@ async function draw(askConfirm){
   document.getElementById('orderZone').classList.remove('hidden');
   ['lg0','lg1','lg2','lg3'].forEach((id,i)=>document.getElementById(id).textContent=names[i]);
   const assign = distribute();
-  render(assign);
+  render(assign, true);
   document.getElementById('balanceSection').scrollIntoView({behavior:'smooth',block:'nearest'});
   await saveDraw(assign);
 }
@@ -637,12 +714,13 @@ async function saveDraw(assign){
   const payload={
     mode, names, order, blocks: serializeBlocks(),
     assign: assign.map(a=>({idx:a.idx,s1:a.s1,s2:a.s2})),
+    original: (originalAssign||assign).map(a=>({idx:a.idx,s1:a.s1,s2:a.s2})),
     savedAt: new Date().toISOString()
   };
   const { error } = await sb.from('sorteig_resultat').upsert({ id:MODE_ROW[mode], data: payload, creat_el: new Date().toISOString() });
   if(error){ setSyncStatus('sync-off','Error guardant: '+error.message); return; }
   hasSavedDraw[mode] = true;
-  if(mode==='regular') rmWinners = findRmWinners(assign); // remember for champions
+  if(mode==='regular') rmWinners = findRmWinners(originalAssign||assign); // Madrid from the ORIGINAL draw
   document.getElementById('drawBtn').textContent = 'Fer un sorteig NOU (sobreescriu l\'actual)';
   setSyncStatus('sync-ok',`Guardat "${MODE_LABEL[mode]}" al núvol — visible pels 4 des de qualsevol dispositiu`);
 }
@@ -684,6 +762,8 @@ async function loadSavedDraw(){
     });
   });
   const assign = payload.assign.map(a=>({...MATCHES[a.idx], idx:a.idx, s1:a.s1, s2:a.s2}));
+  // restore the immutable baseline (falls back to assign if an old record has none)
+  originalAssign = (payload.original || payload.assign).map(a=>({idx:a.idx, s1:a.s1, s2:a.s2}));
   const oc=document.getElementById('orderChips');
   oc.innerHTML='';
   order.forEach((pi,rank)=>{
@@ -696,7 +776,7 @@ async function loadSavedDraw(){
   updateClasicBox();
   document.getElementById('orderZone').classList.remove('hidden');
   ['lg0','lg1','lg2','lg3'].forEach((id,i)=>document.getElementById(id).textContent=names[i]);
-  render(assign);
+  render(assign, false);
   hasSavedDraw[mode] = true;
   document.getElementById('drawBtn').textContent = 'Fer un sorteig NOU (sobreescriu l\'actual)';
   const when = new Date(payload.savedAt).toLocaleString('ca-ES');
