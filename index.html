@@ -9,7 +9,627 @@
   CONFIGURACIÓ DE SUPABASE (per guardar el sorteig al núvol)
   ============================================================
   1. Crea un compte gratuït a https://supabase.com i un projecte nou.
+  2. Al projecte, ves a "SQL Editor" i executa exactament això:<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sorteig Abonaments · FC Barcelona 2026-27</title>
+<!--
+  ============================================================
+  CONFIGURACIÓ DE SUPABASE (per guardar el sorteig al núvol)
+  ============================================================
+  1. Crea un compte gratuït a https://supabase.com i un projecte nou.
   2. Al projecte, ves a "SQL Editor" i executa exactament això:
+
+     create table sorteig_resultat (
+       id int primary key default 1,
+       data jsonb not null default '{}'::jsonb,
+       creat_el timestamptz default now()
+     );
+     insert into sorteig_resultat (id, data) values (1, '{}') on conflict do nothing;
+     alter table sorteig_resultat enable row level security;
+     create policy "lectura publica" on sorteig_resultat for select using (true);
+     create policy "escriptura publica" on sorteig_resultat for insert with check (true);
+     create policy "actualitzacio publica" on sorteig_resultat for update using (true);
+
+  3. Ves a "Project Settings" -> "API" i copia:
+     - "Project URL"      -> enganxa'l a SUPABASE_URL més avall
+     - "anon public" key  -> enganxa'l a SUPABASE_ANON_KEY més avall
+  4. Desa l'arxiu i puja'l a GitHub Pages (o qualsevol hosting estàtic). Ja està.
+  ============================================================
+-->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --blau:#004D98;
+    --grana:#A50044;
+    --or:#EDBB00;
+    --ink:#0e1116;
+    --paper:#faf8f5;
+    --line:#e4ddd3;
+    --muted:#7c7266;
+    --p1:#004D98;
+    --p2:#A50044;
+    --p3:#1a7a4c;
+    --p4:#c26a00;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.5;
+    padding:0 0 60px;
+  }
+  .band{height:6px;background:linear-gradient(90deg,var(--blau) 0 50%,var(--grana) 50% 100%)}
+  header{padding:26px 22px 20px;border-bottom:1px solid var(--line);background:#fff}
+  .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--grana);font-weight:700}
+  h1{font-size:26px;font-weight:800;letter-spacing:-.02em;margin-top:4px}
+  h1 span{color:var(--blau)}
+  .sub{color:var(--muted);font-size:14px;margin-top:6px;max-width:620px}
+  .wrap{max-width:860px;margin:0 auto;padding:0 22px}
+  section{margin-top:26px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px}
+  .step-label{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .step-num{background:var(--blau);color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px}
+  .names{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .names input{padding:11px 12px;border:1.5px solid var(--line);border-radius:9px;font-size:15px;font-family:inherit;width:100%;transition:border-color .15s}
+  .names input:focus{outline:none;border-color:var(--blau)}
+  .row-btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  button{font-family:inherit;font-size:14px;font-weight:600;padding:11px 18px;border-radius:9px;border:none;cursor:pointer;transition:transform .1s,box-shadow .15s}
+  button:active{transform:translateY(1px)}
+  .btn-primary{background:var(--grana);color:#fff}
+  .btn-primary:hover{box-shadow:0 4px 14px rgba(165,0,68,.28)}
+  .btn-ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line)}
+  .btn-ghost:hover{border-color:var(--muted)}
+  .btn-primary:disabled{background:#c9c2b8;cursor:not-allowed;box-shadow:none}
+  .order-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+  .chip{padding:7px 13px;border-radius:20px;font-weight:700;font-size:14px;color:#fff;display:flex;align-items:center;gap:7px}
+  .chip .n{background:rgba(255,255,255,.28);width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px}
+  .arrow{color:var(--muted);font-weight:700}
+  .clasic-box{margin-top:14px;padding:14px 16px;background:#fff7e6;border:1px solid var(--or);border-radius:10px;font-size:14px}
+  .clasic-box b{color:var(--grana)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+  th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  td.preu{font-variant-numeric:tabular-nums;color:var(--muted)}
+  .seat{display:inline-block;padding:3px 9px;border-radius:6px;font-size:12.5px;font-weight:700;color:#fff}
+  .cat-pill{font-size:11px;padding:2px 8px;border-radius:5px;font-weight:600}
+  .cat-vermell{background:#fbe0e5;color:#9c1032}
+  .cat-taronja{background:#fdf0d5;color:#8a5a00}
+  .cat-blau{background:#e0ecf7;color:#0a4a86}
+  .cat-groc{background:#f4f1d8;color:#6d6410}
+  .cat-champions{background:#e6e0f5;color:#4a2e86}
+  .cat-copa{background:#e4e6e8;color:#43474d}
+  .balance{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:4px}
+  .bcard{border:1px solid var(--line);border-radius:12px;padding:14px;position:relative;overflow:hidden}
+  .bcard::before{content:'';position:absolute;top:0;left:0;width:5px;height:100%}
+  .bcard.p0::before{background:var(--p1)}.bcard.p1::before{background:var(--p2)}
+  .bcard.p2::before{background:var(--p3)}.bcard.p3::before{background:var(--p4)}
+  .bname{font-weight:800;font-size:15px;margin-bottom:8px}
+  .bstat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
+  .bstat .v{font-weight:700;font-variant-numeric:tabular-nums}
+  .btotal{border-top:1px solid var(--line);margin-top:6px;padding-top:6px;font-size:15px}
+  .devbar{margin-top:16px;padding:14px 16px;border-radius:10px;font-size:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .dev-good{background:#e5f4ec;border:1px solid #52a878}
+  .dev-mid{background:#fdf3dd;border:1px solid var(--or)}
+  .dev-bad{background:#fbe6e9;border:1px solid var(--grana)}
+  .dev-val{font-weight:800;font-size:18px;font-variant-numeric:tabular-nums}
+  .hidden{display:none}
+  code{background:#f0ece5;padding:1px 6px;border-radius:4px;font-size:13px}
+  .test-row{display:flex;align-items:center;gap:12px;margin:9px 0}
+  .test-name{width:80px;font-weight:700;font-size:13px}
+  .test-track{flex:1;background:#f0ece5;border-radius:6px;height:26px;position:relative;overflow:hidden}
+  .test-fill{height:100%;border-radius:6px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:#fff;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;transition:width .6s ease}
+  .test-ideal{position:absolute;top:0;bottom:0;left:25%;width:2px;background:var(--ink);opacity:.45}
+  .test-verdict{margin-top:14px;padding:12px 15px;border-radius:9px;font-size:14px;font-weight:600;background:#e5f4ec;border:1px solid #52a878}
+  .test-note{font-size:12px;color:var(--muted);margin-top:6px}
+  .sync-status{margin-top:12px;font-size:12.5px;font-weight:600;padding:8px 12px;border-radius:8px;display:inline-flex;align-items:center;gap:7px}
+  .sync-ok{background:#e5f4ec;color:#1a7a4c;border:1px solid #52a878}
+  .sync-wait{background:#fdf3dd;color:#8a5a00;border:1px solid var(--or)}
+  .sync-off{background:#fbe6e9;color:var(--grana);border:1px solid var(--grana)}
+  .sync-dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+  .cat-legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .cat-count{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:8px;font-size:12.5px;font-weight:600;border:1px solid var(--line)}
+  .cat-count b{font-variant-numeric:tabular-nums;font-size:14px}
+  #blockTable td{text-align:center}
+  #blockTable td:nth-child(2){text-align:left}
+  #blockTable input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:var(--grana)}
+  #blockTable tbody tr:hover{background:#faf6f0}
+  .blk-warn{color:var(--grana);font-size:11px;font-weight:700}
+  .cat-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+  .cat-box{border-radius:10px;padding:12px 14px;border:1px solid var(--line)}
+  .cat-box .big{font-size:26px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .cat-box .lbl{font-size:12px;font-weight:700;margin-top:4px}
+  .cat-box .eur{font-size:11px;color:var(--muted);margin-top:2px}
+  .cb-vermell{background:#fbe0e5}.cb-vermell .big,.cb-vermell .lbl{color:#9c1032}
+  .cb-taronja{background:#fdf0d5}.cb-taronja .big,.cb-taronja .lbl{color:#8a5a00}
+  .cb-blau{background:#e0ecf7}.cb-blau .big,.cb-blau .lbl{color:#0a4a86}
+  .cb-groc{background:#f4f1d8}.cb-groc .big,.cb-groc .lbl{color:#6d6410}
+  .cb-champions{background:#e6e0f5}.cb-champions .big,.cb-champions .lbl{color:#4a2e86}
+  .cb-copa{background:#e4e6e8}.cb-copa .big,.cb-copa .lbl{color:#43474d}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:8px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--muted)}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+  @media(max-width:560px){
+    th.hide-m,td.hide-m{display:none}
+    h1{font-size:22px}
+  }
+</style>
+</head>
+<body>
+<div class="band"></div>
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Repartiment d'abonaments · 2 pases · 4 persones</div>
+    <h1>Sorteig <span>FC Barcelona</span> 2026-27</h1>
+    <p class="sub">Introdueix els 4 noms, marca les restriccions si cal, i sorteja. El repartiment assigna cada partit (de més car a més barat) a les 2 persones amb menys valor acumulat fins al moment, respectant els bloquejos. L'objectiu és igualar el valor total de cadascú.</p>
+    <div id="syncStatus" class="sync-status sync-wait"><span class="sync-dot"></span>Connectant amb el núvol…</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="card" id="summaryCard">
+    <div class="step-label">Partits de casa per categoria · temporada 2026-27</div>
+    <div id="catSummary" class="cat-summary"></div>
+    <p class="hint" style="margin-top:12px">Aquest és el repartiment que cal equilibrar: idealment cada persona acaba amb un mix semblant de cada color, no només el mateix nombre de partits.</p>
+  </section>
+
+  <section class="card">
+    <div class="step-label"><span class="step-num">1</span> Els 4 participants</div>
+    <div class="names">
+      <input id="n0" placeholder="Nom 1" value="Berni">
+      <input id="n1" placeholder="Nom 2" value="Carol">
+      <input id="n2" placeholder="Nom 3" value="Isaac">
+      <input id="n3" placeholder="Nom 4" value="Raúl">
+    </div>
+    <div class="row-btns">
+      <button class="btn-primary" id="drawBtn">Sortejar ordre i repartir</button>
+      <button class="btn-ghost" id="resetBtn">Reiniciar</button>
+    </div>
+    <div id="orderZone" class="hidden">
+      <div class="step-label" style="margin-top:20px"><span class="step-num">2</span> Ordre de tria sortejat</div>
+      <div class="order-chips" id="orderChips"></div>
+      <div class="clasic-box" id="clasicBox"></div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:18px">
+    <div class="step-label"><span class="step-num">✗</span> Restriccions de disponibilitat (opcional)</div>
+    <p class="hint" style="margin-top:0">Marca qui <b>NO</b> pot anar a cada partit. El sorteig no li assignarà aquell partit. Deixa-ho en blanc si tothom pot anar-hi.</p>
+    <div style="overflow-x:auto;margin-top:12px">
+      <table id="blockTable">
+        <thead>
+          <tr>
+            <th>J</th>
+            <th>Partit</th>
+            <th id="bh0" style="text-align:center">P1</th>
+            <th id="bh1" style="text-align:center">P2</th>
+            <th id="bh2" style="text-align:center">P3</th>
+            <th id="bh3" style="text-align:center">P4</th>
+          </tr>
+        </thead>
+        <tbody id="blockBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:18px">
+    <div class="step-label"><span class="step-num">i</span> Partits de casa per categoria</div>
+    <p class="hint" style="margin-top:0">Aquests són els 27 partits a repartir (18 de Lliga + rondes europees/Copa estimades). Busqueu que cadascú acumuli un mix semblant de cada categoria, no només el mateix nombre.</p>
+    <div class="cat-legend" id="catLegendMain" style="margin-top:12px"></div>
+  </section>
+
+  <section id="tableSection" class="card hidden">
+    <div class="step-label"><span class="step-num">3</span> Repartiment partit a partit</div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--p1)"></span><b id="lg0">P1</b></span>
+      <span><span class="dot" style="background:var(--p2)"></span><b id="lg1">P2</b></span>
+      <span><span class="dot" style="background:var(--p3)"></span><b id="lg2">P3</b></span>
+      <span><span class="dot" style="background:var(--p4)"></span><b id="lg3">P4</b></span>
+    </div>
+    <div class="cat-legend" id="catLegend"></div>
+    <div style="overflow-x:auto;margin-top:12px">
+      <table id="matchTable">
+        <thead>
+          <tr>
+            <th>J</th>
+            <th>Partit</th>
+            <th class="hide-m">Categoria</th>
+            <th class="preu">Preu</th>
+            <th>Seient 1</th>
+            <th>Seient 2</th>
+          </tr>
+        </thead>
+        <tbody id="matchBody"></tbody>
+      </table>
+    </div>
+    <p class="hint">El preu de cada partit es divideix entre els 2 seients. Cada persona paga la seva meitat + 125 € fixos de carnet de soci.</p>
+  </section>
+
+  <section id="balanceSection" class="hidden">
+    <div class="step-label" style="margin-left:2px"><span class="step-num">4</span> Balanç final</div>
+    <div class="balance" id="balanceCards"></div>
+    <div id="devBar" class="devbar"></div>
+  </section>
+
+  <section class="card" style="margin-top:26px">
+    <div class="step-label"><span class="step-num">✓</span> Test de transparència · comprova que és aleatori</div>
+    <p class="hint" style="margin-top:0">Fa 10.000 sorteigs amb <code>Math.random()</code> del teu navegador i compta quants cops queda primer cadascú. Si és aleatori de veritat, tots han de rondar el 25% (2.500). Cap número "màgic", cap trampa.</p>
+    <div class="row-btns">
+      <button class="btn-ghost" id="testBtn">Executar 10.000 sorteigs</button>
+    </div>
+    <div id="testResult" class="hidden" style="margin-top:16px"></div>
+  </section>
+
+</div>
+
+<script>
+// ============================================================
+// CONFIGURACIÓ SUPABASE — enganxa aquí les teves claus (veure instruccions al <head>)
+// ============================================================
+const SUPABASE_URL = 'https://frmnwjvukqlzxvrbmfgs.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_R6KeIUeh_EGYJjdTn5gD-g_5ub-wKmq';
+
+let sb = null;
+let cloudReady = false;
+try{
+  if(SUPABASE_URL && SUPABASE_URL.startsWith('http') && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY'){
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    cloudReady = true;
+  }
+}catch(e){ cloudReady = false; }
+
+function setSyncStatus(state, text){
+  const el = document.getElementById('syncStatus');
+  el.className = 'sync-status ' + state;
+  el.innerHTML = '<span class="sync-dot"></span>' + text;
+}
+
+const MATCHES = [
+  {comp:"Lliga",jor:"J1",data:"16/08/26",part:"Athletic",cat:"Taronja (Mitjà)",preu:96.20},
+  {comp:"Lliga",jor:"J3",data:"30/08/26",part:"Rayo Vallecano",cat:"Groc (Baix)",preu:13.74},
+  {comp:"Lliga",jor:"J6",data:"16/09/26",part:"Racing Santander",cat:"Groc (Baix)",preu:13.74},
+  {comp:"Lliga",jor:"J8",data:"11/10/26",part:"Getafe",cat:"Blau (Mitjà)",preu:41.23},
+  {comp:"Lliga",jor:"J10",data:"25/10/26",part:"Real Madrid",cat:"Vermell (Top)",preu:164.92},
+  {comp:"Lliga",jor:"J11",data:"01/11/26",part:"Alavés",cat:"Groc (Baix)",preu:13.74},
+  {comp:"Lliga",jor:"J13",data:"22/11/26",part:"Villarreal",cat:"Taronja (Mitjà)",preu:68.72},
+  {comp:"Lliga",jor:"J15",data:"06/12/26",part:"Celta",cat:"Groc (Baix)",preu:13.74},
+  {comp:"Lliga",jor:"J17",data:"20/12/26",part:"Reial Societat",cat:"Blau (Mitjà)",preu:41.23},
+  {comp:"Lliga",jor:"J20",data:"17/01/27",part:"Elx",cat:"Groc (Baix)",preu:13.74},
+  {comp:"Lliga",jor:"J22",data:"31/01/27",part:"València",cat:"Blau (Mitjà)",preu:54.97},
+  {comp:"Lliga",jor:"J23",data:"07/02/27",part:"Atlético Madrid",cat:"Vermell (Top)",preu:109.94},
+  {comp:"Lliga",jor:"J25",data:"21/02/27",part:"Llevant",cat:"Groc (Baix)",preu:13.74},
+  {comp:"Lliga",jor:"J27",data:"07/03/27",part:"Betis",cat:"Taronja (Mitjà)",preu:68.72},
+  {comp:"Lliga",jor:"J28",data:"14/03/27",part:"Deportivo",cat:"Groc (Baix)",preu:13.74},
+  {comp:"Lliga",jor:"J30",data:"04/04/27",part:"Sevilla",cat:"Blau (Mitjà)",preu:54.97},
+  {comp:"Lliga",jor:"J32",data:"18/04/27",part:"Espanyol",cat:"Taronja (Mitjà)",preu:96.20},
+  {comp:"Lliga",jor:"J34",data:"02/05/27",part:"Osasuna",cat:"Groc (Baix)",preu:13.74},
+  {comp:"Lliga",jor:"J37",data:"23/05/27",part:"Málaga",cat:"Groc (Baix)",preu:13.74},
+  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 1 (top)",cat:"Champions",preu:137.43},
+  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 2",cat:"Champions",preu:54.97},
+  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 3",cat:"Champions",preu:41.23},
+  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 4",cat:"Champions",preu:27.49},
+  {comp:"Champions",jor:"—",data:"—",part:"Vuitens",cat:"Champions",preu:68.72},
+  {comp:"Champions",jor:"—",data:"—",part:"Quarts",cat:"Champions",preu:68.72},
+  {comp:"Champions",jor:"—",data:"—",part:"Semis",cat:"Champions",preu:82.46},
+  {comp:"Copa",jor:"—",data:"—",part:"Quarts",cat:"Copa",preu:27.49},
+  {comp:"Copa",jor:"—",data:"—",part:"Semis",cat:"Copa",preu:68.72},
+];
+const SOCI = 125;
+const COLORS = ['var(--p1)','var(--p2)','var(--p3)','var(--p4)'];
+let names = [];
+let order = [];
+
+// Category count legend (rendered on load)
+function renderCatLegend(){
+  const cats={};
+  MATCHES.forEach(m=>{
+    let key;
+    if(m.cat.startsWith('Vermell')) key='Vermell (Top)';
+    else if(m.cat.startsWith('Taronja')) key='Taronja (Mitjà-alt)';
+    else if(m.cat.startsWith('Blau')) key='Blau (Mitjà)';
+    else if(m.cat.startsWith('Groc')) key='Groc (Baix)';
+    else if(m.cat.startsWith('Champions')) key='Champions';
+    else key='Copa';
+    cats[key]=(cats[key]||0)+1;
+  });
+  const order=['Vermell (Top)','Taronja (Mitjà-alt)','Blau (Mitjà)','Groc (Baix)','Champions','Copa'];
+  const cls={'Vermell (Top)':'cat-vermell','Taronja (Mitjà-alt)':'cat-taronja','Blau (Mitjà)':'cat-blau','Groc (Baix)':'cat-groc','Champions':'cat-champions','Copa':'cat-copa'};
+  const el=document.getElementById('catLegend');
+  const html=order.filter(k=>cats[k]).map(k=>
+    `<span class="cat-count"><span class="cat-pill ${cls[k]}">${k}</span><b>${cats[k]}</b></span>`
+  ).join('');
+  if(el) el.innerHTML=html;
+  const elMain=document.getElementById('catLegendMain');
+  if(elMain) elMain.innerHTML=html;
+}
+renderCatLegend();
+
+// Build the restrictions grid (one row per match, 4 checkboxes)
+function renderBlockGrid(){
+  const body=document.getElementById('blockBody');
+  body.innerHTML='';
+  MATCHES.forEach((m,i)=>{
+    const tr=document.createElement('tr');
+    let checks='';
+    for(let p=0;p<4;p++){
+      checks+=`<td><input type="checkbox" data-match="${i}" data-person="${p}"></td>`;
+    }
+    tr.innerHTML=`<td style="font-size:12px;color:var(--muted)">${m.jor}</td><td>${m.part}</td>${checks}`;
+    body.appendChild(tr);
+  });
+}
+renderBlockGrid();
+
+// Read checkboxes into the blocks object; warn if a match has >2 blocks
+function readBlocks(){
+  blocks={};
+  document.querySelectorAll('#blockBody input[type=checkbox]:checked').forEach(cb=>{
+    const mi=+cb.dataset.match, pe=+cb.dataset.person;
+    if(!blocks[mi]) blocks[mi]=new Set();
+    blocks[mi].add(pe);
+  });
+  // validate: no match may block 3+ (need at least 2 to fill seats)
+  const bad=[];
+  Object.entries(blocks).forEach(([mi,set])=>{ if(set.size>2) bad.push(MATCHES[mi].part); });
+  return bad;
+}
+// keep header labels in sync with names
+function syncBlockHeaders(){
+  for(let p=0;p<4;p++){
+    const nm=document.getElementById('n'+p).value.trim()||('P'+(p+1));
+    const h=document.getElementById('bh'+p); if(h) h.textContent=nm;
+  }
+}
+['n0','n1','n2','n3'].forEach(id=>document.getElementById(id).addEventListener('input',syncBlockHeaders));
+syncBlockHeaders();
+
+function catClass(cat){
+  if(cat.startsWith('Vermell'))return'cat-vermell';
+  if(cat.startsWith('Taronja'))return'cat-taronja';
+  if(cat.startsWith('Blau'))return'cat-blau';
+  if(cat.startsWith('Groc'))return'cat-groc';
+  if(cat.startsWith('Champions'))return'cat-champions';
+  return'cat-copa';
+}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+// Snake draft with 2 seats per match.
+// We build a pick sequence: for each seat-slot across all matches, cycle through
+// snake order. Matches sorted desc by price. Each match takes the next 2 distinct
+// picks from the snake sequence (so 2 different people per match).
+// blocks[matchIdx] = Set of person indices who CANNOT attend that match
+let blocks = {};
+
+function distribute(){
+  const sorted = MATCHES.map((m,i)=>({...m,idx:i})).sort((a,b)=>b.preu-a.preu);
+  // running accumulated value per person, to keep balance tight
+  const val=[0,0,0,0];
+  const cnt=[0,0,0,0];
+  // tie-break order comes from the sorteig ('order'): earlier in order = priority
+  const priority={}; order.forEach((p,rank)=>priority[p]=rank);
+
+  const assign=[];
+  for(const m of sorted){
+    const blocked = blocks[m.idx] || new Set();
+    let eligible=[0,1,2,3].filter(p=>!blocked.has(p));
+    // safety: if fewer than 2 eligible, relax (should not happen with <=2 blocks)
+    if(eligible.length<2) eligible=[0,1,2,3];
+    // choose the 2 eligible people with lowest accumulated value;
+    // tie-break by fewer matches, then by sorteig priority, then random
+    const pick=[...eligible].sort((a,b)=>
+      val[a]-val[b] || cnt[a]-cnt[b] || priority[a]-priority[b] || (Math.random()-0.5)
+    );
+    const s1=pick[0], s2=pick[1];
+    val[s1]+=m.preu/2; val[s2]+=m.preu/2;
+    cnt[s1]++; cnt[s2]++;
+    assign.push({...m,s1,s2});
+  }
+  return assign;
+}
+
+function render(assign){
+  // table
+  const body=document.getElementById('matchBody');
+  body.innerHTML='';
+  // keep original catalogue order for display (nicer), map assignment by idx
+  const byIdx={}; assign.forEach(a=>byIdx[a.idx]=a);
+  MATCHES.forEach((m,i)=>{
+    const a=byIdx[i];
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td style="font-size:12px;color:var(--muted)">${m.jor}</td>
+      <td><b>${m.part}</b>${m.data!=='—'?`<br><span style="font-size:11px;color:var(--muted)">${m.data}</span>`:''}</td>
+      <td class="hide-m"><span class="cat-pill ${catClass(m.cat)}">${m.cat}</span></td>
+      <td class="preu">${m.preu.toFixed(2)} €</td>
+      <td><span class="seat" style="background:${COLORS[a.s1]}">${names[a.s1]}</span></td>
+      <td><span class="seat" style="background:${COLORS[a.s2]}">${names[a.s2]}</span></td>`;
+    body.appendChild(tr);
+  });
+  document.getElementById('tableSection').classList.remove('hidden');
+
+  // balance
+  const stat=[0,1,2,3].map(()=>({n:0,val:0}));
+  assign.forEach(a=>{
+    stat[a.s1].n++; stat[a.s1].val+=a.preu/2;
+    stat[a.s2].n++; stat[a.s2].val+=a.preu/2;
+  });
+  const cards=document.getElementById('balanceCards');
+  cards.innerHTML='';
+  stat.forEach((s,i)=>{
+    const total=s.val+SOCI;
+    const d=document.createElement('div');
+    d.className='bcard p'+i;
+    d.innerHTML=`
+      <div class="bname">${names[i]}</div>
+      <div class="bstat"><span>Partits</span><span class="v">${s.n}</span></div>
+      <div class="bstat"><span>Valor partits</span><span class="v">${s.val.toFixed(2)} €</span></div>
+      <div class="bstat"><span>Carnet soci</span><span class="v">${SOCI.toFixed(2)} €</span></div>
+      <div class="bstat btotal"><span>TOTAL a pagar</span><span class="v">${total.toFixed(2)} €</span></div>`;
+    cards.appendChild(d);
+  });
+  const vals=stat.map(s=>s.val);
+  const dev=Math.max(...vals)-Math.min(...vals);
+  const bar=document.getElementById('devBar');
+  let cls='dev-good',msg='Repartiment molt equilibrat';
+  if(dev>30){cls='dev-bad';msg='Desequilibrat — repeteix el sorteig o ajusta manualment';}
+  else if(dev>15){cls='dev-mid';msg='Acceptable — es pot afinar';}
+  bar.className='devbar '+cls;
+  bar.innerHTML=`<span>${msg}</span><span>Desviació màx.: <span class="dev-val">${dev.toFixed(2)} €</span></span>`;
+  document.getElementById('balanceSection').classList.remove('hidden');
+}
+
+let hasSavedDraw = false;
+
+async function draw(askConfirm){
+  if(askConfirm && hasSavedDraw){
+    const ok = confirm('Ja hi ha un sorteig guardat al núvol, visible pels 4. Si en fas un de nou, el sobreescriuràs per a tothom.\n\nVols continuar?');
+    if(!ok) return;
+  }
+  names=[0,1,2,3].map(i=>document.getElementById('n'+i).value.trim()||('Persona '+(i+1)));
+  const badMatches=readBlocks();
+  if(badMatches.length){
+    alert('Atenció: aquests partits tenen 3 o més persones bloquejades, i calen mínim 2 lliures per omplir els 2 seients:\n\n'+badMatches.join(', ')+'\n\nDesmarca alguna restricció abans de sortejar.');
+    return;
+  }
+  order=shuffle([0,1,2,3]);
+  const oc=document.getElementById('orderChips');
+  oc.innerHTML='';
+  order.forEach((pi,rank)=>{
+    const c=document.createElement('span');
+    c.className='chip';
+    c.style.background=COLORS[pi];
+    c.innerHTML=`<span class="n">${rank+1}</span>${names[pi]}`;
+    oc.appendChild(c);
+    if(rank<3){const ar=document.createElement('span');ar.className='arrow';ar.textContent='→';oc.appendChild(ar);}
+  });
+  document.getElementById('clasicBox').innerHTML=
+    `<b>Barça–Madrid:</b> l'ordre sortejat és la prioritat de desempat quan cal decidir qui té preferència en partits d'igual valor. `+
+    `Regla de compensació: qui NO va al Clàssic (<b>${names[order[2]]}</b> i <b>${names[order[3]]}</b>, els últims de l'ordre) tenen preferència per triar Quarts o Semis de Champions.`;
+  document.getElementById('orderZone').classList.remove('hidden');
+  ['lg0','lg1','lg2','lg3'].forEach((id,i)=>document.getElementById(id).textContent=names[i]);
+  const assign = distribute();
+  render(assign);
+  document.getElementById('balanceSection').scrollIntoView({behavior:'smooth',block:'nearest'});
+  await saveDraw(assign);
+}
+
+function serializeBlocks(){
+  const out={};
+  Object.keys(blocks).forEach(k=>{ out[k]=[...blocks[k]]; });
+  return out;
+}
+function deserializeBlocks(obj){
+  const out={};
+  Object.keys(obj||{}).forEach(k=>{ out[k]=new Set(obj[k]); });
+  return out;
+}
+
+async function saveDraw(assign){
+  if(!cloudReady){ setSyncStatus('sync-off','No guardat: falta configurar Supabase (veure comentari al capçal del fitxer)'); return; }
+  setSyncStatus('sync-wait','Guardant al núvol…');
+  const payload={
+    names, order, blocks: serializeBlocks(),
+    assign: assign.map(a=>({idx:a.idx,s1:a.s1,s2:a.s2})),
+    savedAt: new Date().toISOString()
+  };
+  const { error } = await sb.from('sorteig_resultat').upsert({ id:1, data: payload, creat_el: new Date().toISOString() });
+  if(error){ setSyncStatus('sync-off','Error guardant: '+error.message); return; }
+  hasSavedDraw = true;
+  document.getElementById('drawBtn').textContent = 'Fer un sorteig NOU (sobreescriu l\'actual)';
+  setSyncStatus('sync-ok','Guardat al núvol — visible pels 4 des de qualsevol dispositiu');
+}
+
+async function loadSavedDraw(){
+  if(!cloudReady){ setSyncStatus('sync-off','Sense connexió al núvol (falten les claus de Supabase al fitxer)'); return; }
+  setSyncStatus('sync-wait','Carregant sorteig guardat…');
+  const { data, error } = await sb.from('sorteig_resultat').select('data').eq('id',1).maybeSingle();
+  if(error){ setSyncStatus('sync-off','Error carregant: '+error.message); return; }
+  if(!data || !data.data || !data.data.assign || !data.data.assign.length){
+    setSyncStatus('sync-ok','Connectat al núvol — encara no hi ha cap sorteig fet');
+    return;
+  }
+  const payload=data.data;
+  names=payload.names; order=payload.order; blocks=deserializeBlocks(payload.blocks);
+  [0,1,2,3].forEach(i=>{ document.getElementById('n'+i).value = names[i]; });
+  syncBlockHeaders();
+  // restore checkboxes
+  Object.keys(blocks).forEach(mi=>{
+    blocks[mi].forEach(pe=>{
+      const cb=document.querySelector(`#blockBody input[data-match="${mi}"][data-person="${pe}"]`);
+      if(cb) cb.checked=true;
+    });
+  });
+  const assign = payload.assign.map(a=>({...MATCHES[a.idx], idx:a.idx, s1:a.s1, s2:a.s2}));
+  const oc=document.getElementById('orderChips');
+  oc.innerHTML='';
+  order.forEach((pi,rank)=>{
+    const c=document.createElement('span');
+    c.className='chip'; c.style.background=COLORS[pi];
+    c.innerHTML=`<span class="n">${rank+1}</span>${names[pi]}`;
+    oc.appendChild(c);
+    if(rank<3){const ar=document.createElement('span');ar.className='arrow';ar.textContent='→';oc.appendChild(ar);}
+  });
+  document.getElementById('clasicBox').innerHTML=
+    `<b>Barça–Madrid:</b> l'ordre sortejat és la prioritat de desempat quan cal decidir qui té preferència en partits d'igual valor. `+
+    `Regla de compensació: qui NO va al Clàssic (<b>${names[order[2]]}</b> i <b>${names[order[3]]}</b>, els últims de l'ordre) tenen preferència per triar Quarts o Semis de Champions.`;
+  document.getElementById('orderZone').classList.remove('hidden');
+  ['lg0','lg1','lg2','lg3'].forEach((id,i)=>document.getElementById(id).textContent=names[i]);
+  render(assign);
+  hasSavedDraw = true;
+  document.getElementById('drawBtn').textContent = 'Fer un sorteig NOU (sobreescriu l\'actual)';
+  const when = new Date(payload.savedAt).toLocaleString('ca-ES');
+  setSyncStatus('sync-ok', `Sorteig carregat del núvol · fet el ${when}`);
+}
+
+document.getElementById('drawBtn').addEventListener('click',()=>draw(true));
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  document.getElementById('orderZone').classList.add('hidden');
+  document.getElementById('tableSection').classList.add('hidden');
+  document.getElementById('balanceSection').classList.add('hidden');
+});
+
+loadSavedDraw();
+
+
+// --- Transparency test: 10.000 shuffles, count first-place frequency ---
+document.getElementById('testBtn').addEventListener('click',()=>{
+  const N=10000;
+  const firstCount=[0,0,0,0];
+  for(let k=0;k<N;k++){
+    const arr=shuffle([0,1,2,3]);
+    firstCount[arr[0]]++;
+  }
+  const tnames=[0,1,2,3].map(i=>document.getElementById('n'+i).value.trim()||('Persona '+(i+1)));
+  const box=document.getElementById('testResult');
+  let html='';
+  firstCount.forEach((c,i)=>{
+    const pct=(c/N*100);
+    html+=`<div class="test-row">
+      <span class="test-name">${tnames[i]}</span>
+      <div class="test-track">
+        <div class="test-ideal"></div>
+        <div class="test-fill" style="width:${pct}%;background:${COLORS[i]}">${c} (${pct.toFixed(1)}%)</div>
+      </div>
+    </div>`;
+  });
+  // verdict: all within +-2 percentage points of 25%
+  const maxDev=Math.max(...firstCount.map(c=>Math.abs(c/N*100-25)));
+  const ok=maxDev<2;
+  html+=`<div class="test-verdict" style="${ok?'':'background:#fbe6e9;border-color:var(--grana)'}">
+    ${ok?'✓ Distribució uniforme confirmada':'⚠ Desviació inesperada'} — desviació màxima respecte al 25%: ${maxDev.toFixed(2)} punts</div>`;
+  html+=`<div class="test-note">La línia vertical marca el 25% ideal. En ${N.toLocaleString('ca')} sorteigs, cada nom hauria de quedar primer ~2.500 cops. Les petites diferències són l'atzar normal — si sortís sempre el mateix, aquí es veuria una barra al 100%.</div>`;
+  box.innerHTML=html;
+  box.classList.remove('hidden');
+});
+</script>
+</body>
+</html>
+
 
      create table sorteig_resultat (
        id int primary key default 1,
