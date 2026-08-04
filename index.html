@@ -422,9 +422,10 @@ function readBlocks(){
     if(!blocks[mi]) blocks[mi]=new Set();
     blocks[mi].add(pe);
   });
-  // validate: no match may block 3+ (need at least 2 to fill seats)
+  // validate: a match can't block all 4 people (need at least 1 to attend).
+  // If exactly 1 person is free, that person takes BOTH seats.
   const bad=[];
-  Object.entries(blocks).forEach(([mi,set])=>{ if(set.size>2) bad.push(MATCHES[mi].part); });
+  Object.entries(blocks).forEach(([mi,set])=>{ if(set.size>=4) bad.push(MATCHES[mi].part); });
   return bad;
 }
 // keep header labels in sync with names
@@ -456,6 +457,8 @@ function distribute(){
   const pk=(a,b)=>[a,b].sort((x,y)=>x-y).join('-');
 
   function pickPair(m, people){
+    // if only one person is available, they take BOTH seats
+    if(people.length===1){ return {a:people[0], b:people[0]}; }
     let best=null;
     for(let i=0;i<people.length;i++){
       for(let j=i+1;j<people.length;j++){
@@ -478,7 +481,8 @@ function distribute(){
   function eligibleFor(m){
     const blocked = blocks[m.idx] || new Set();
     let people=[0,1,2,3].filter(p=>!blocked.has(p));
-    if(people.length<2) people=[0,1,2,3];
+    // only override the blocks if NOBODY is free (shouldn't happen: validation stops 4-blocks)
+    if(people.length===0) people=[0,1,2,3];
     return people;
   }
 
@@ -669,7 +673,7 @@ async function draw(askConfirm){
 
   const badMatches=readBlocks();
   if(badMatches.length){
-    alert('Atenció: aquests partits tenen 3 o més persones bloquejades, i calen mínim 2 lliures per omplir els 2 seients:\n\n'+badMatches.join(', ')+'\n\nDesmarca alguna restricció abans de sortejar.');
+    alert('Atenció: aquests partits tenen les 4 persones bloquejades, i cal com a mínim 1 persona lliure:\n\n'+badMatches.join(', ')+'\n\nDesmarca alguna restricció abans de sortejar.');
     return;
   }
   order=shuffle([0,1,2,3]);
