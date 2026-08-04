@@ -209,6 +209,7 @@
     <div class="row-btns">
       <button class="btn-primary" id="drawBtn">Sortejar ordre i repartir</button>
       <button class="btn-ghost" id="resetBtn">Reiniciar</button>
+      <button class="btn-ghost" id="wipeBtn" style="color:var(--grana);border-color:var(--grana)">Esborrar aquest sorteig del núvol</button>
     </div>
     <div id="orderZone" class="hidden">
       <div class="step-label" style="margin-top:20px"><span class="step-num">3</span> Ordre de tria sortejat</div>
@@ -570,13 +571,8 @@ function onSeatChange(sel){
   const mi=+sel.dataset.match, seat=+sel.dataset.seat, val=+sel.value;
   const a=currentAssign.find(x=>x.idx===mi);
   if(!a) return;
-  // prevent the same person in both seats
-  const other = seat===1 ? a.s2 : a.s1;
-  if(val===other){
-    alert('No pots posar la mateixa persona als dos seients del mateix partit.');
-    renderTable();
-    return;
-  }
+  // the same person MAY take both seats (e.g. going with a child) —
+  // in that case they absorb the full value of the match (two halves).
   if(seat===1) a.s1=val; else a.s2=val;
   renderTable();
   renderBalance();
@@ -584,11 +580,14 @@ function onSeatChange(sel){
 }
 
 function renderBalance(){
-  // current (real) balance
-  const stat=[0,1,2,3].map(()=>({n:0,val:0}));
+  // current (real) balance. Count seats (for value) and distinct matches attended.
+  const stat=[0,1,2,3].map(()=>({seats:0,matches:0,val:0}));
   currentAssign.forEach(a=>{
-    stat[a.s1].n++; stat[a.s1].val+=a.preu/2;
-    stat[a.s2].n++; stat[a.s2].val+=a.preu/2;
+    const attendees = a.s1===a.s2 ? [a.s1] : [a.s1,a.s2]; // one person on both seats = 1 attendee
+    // value: each seat is half the price, wherever it lands
+    stat[a.s1].val+=a.preu/2; stat[a.s1].seats++;
+    stat[a.s2].val+=a.preu/2; stat[a.s2].seats++;
+    attendees.forEach(p=>stat[p].matches++);
   });
   // original balance (what the draw said each should pay) for debt
   const origVal=[0,0,0,0];
@@ -614,11 +613,13 @@ function renderBalance(){
       debtHtml=`<div class="bstat" style="border-top:1px dashed var(--line);margin-top:4px;padding-top:4px">
         <span>Saldo vs sorteig</span><span class="v" style="color:${col}">${txt}</span></div>`;
     }
+    // show "matches (seats)" only when they differ, so a double-seat is visible
+    const partitsTxt = s.seats>s.matches ? `${s.matches} <span style="font-weight:400;color:var(--muted);font-size:11px">(${s.seats} seients)</span>` : `${s.matches}`;
     const d=document.createElement('div');
     d.className='bcard p'+i;
     d.innerHTML=`
       <div class="bname">${names[i]}</div>
-      <div class="bstat"><span>Partits</span><span class="v">${s.n}</span></div>
+      <div class="bstat"><span>Partits</span><span class="v">${partitsTxt}</span></div>
       <div class="bstat"><span>Valor partits</span><span class="v">${s.val.toFixed(2)} €</span></div>
       <div class="bstat"><span>Carnet soci</span><span class="v">${SOCI.toFixed(2)} €</span></div>
       <div class="bstat btotal"><span>TOTAL a pagar</span><span class="v">${total.toFixed(2)} €</span></div>
@@ -802,6 +803,23 @@ document.getElementById('resetBtn').addEventListener('click',()=>{
   document.getElementById('orderZone').classList.add('hidden');
   document.getElementById('tableSection').classList.add('hidden');
   document.getElementById('balanceSection').classList.add('hidden');
+});
+
+document.getElementById('wipeBtn').addEventListener('click',async ()=>{
+  if(!cloudReady){ alert('No hi ha connexió al núvol.'); return; }
+  const ok = confirm(`Vols ESBORRAR del núvol el sorteig de "${MODE_LABEL[mode]}"?\n\nAixò l'elimina per als 4 i no es pot desfer. Els altres modes no es toquen.`);
+  if(!ok) return;
+  setSyncStatus('sync-wait','Esborrant del núvol…');
+  const { error } = await sb.from('sorteig_resultat').upsert({ id:MODE_ROW[mode], data:{}, creat_el:new Date().toISOString() });
+  if(error){ setSyncStatus('sync-off','Error esborrant: '+error.message); return; }
+  // reset local state for this mode
+  originalAssign=null; currentAssign=null; hasSavedDraw[mode]=false;
+  if(mode==='regular') rmWinners=null;
+  document.getElementById('orderZone').classList.add('hidden');
+  document.getElementById('tableSection').classList.add('hidden');
+  document.getElementById('balanceSection').classList.add('hidden');
+  document.getElementById('drawBtn').textContent='Sortejar ordre i repartir';
+  setSyncStatus('sync-ok',`Sorteig de "${MODE_LABEL[mode]}" esborrat. Pots sortejar de nou quan vulguis.`);
 });
 
 loadSavedDraw();
