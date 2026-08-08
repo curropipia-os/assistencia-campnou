@@ -422,11 +422,9 @@ function readBlocks(){
     if(!blocks[mi]) blocks[mi]=new Set();
     blocks[mi].add(pe);
   });
-  // validate: a match can't block all 4 people (need at least 1 to attend).
-  // If exactly 1 person is free, that person takes BOTH seats.
-  const bad=[];
-  Object.entries(blocks).forEach(([mi,set])=>{ if(set.size>=4) bad.push(MATCHES[mi].part); });
-  return bad;
+  // No validation needed: 1 free person takes both seats; 0 free means the
+  // match is left unassigned ("ningú"), to be resolved by the group off-system.
+  return [];
 }
 // keep header labels in sync with names
 function syncBlockHeaders(){
@@ -457,7 +455,9 @@ function distribute(){
   const pk=(a,b)=>[a,b].sort((x,y)=>x-y).join('-');
 
   function pickPair(m, people){
-    // if only one person is available, they take BOTH seats
+    // nobody free → match left unassigned ("ningú"), seats = -1
+    if(people.length===0){ return {a:-1, b:-1}; }
+    // only one person free → they take BOTH seats
     if(people.length===1){ return {a:people[0], b:people[0]}; }
     let best=null;
     for(let i=0;i<people.length;i++){
@@ -473,17 +473,15 @@ function distribute(){
     return best;
   }
   function commit(m, s1, s2){
-    val[s1]+=m.preu/2; val[s2]+=m.preu/2;
-    cnt[s1]++; cnt[s2]++;
-    pairCount[pk(s1,s2)]=(pairCount[pk(s1,s2)]||0)+1;
+    if(s1>=0){ val[s1]+=m.preu/2; cnt[s1]++; }
+    if(s2>=0){ val[s2]+=m.preu/2; cnt[s2]++; }
+    if(s1>=0 && s2>=0) pairCount[pk(s1,s2)]=(pairCount[pk(s1,s2)]||0)+1;
     assign.push({...m,s1,s2});
   }
   function eligibleFor(m){
     const blocked = blocks[m.idx] || new Set();
-    let people=[0,1,2,3].filter(p=>!blocked.has(p));
-    // only override the blocks if NOBODY is free (shouldn't happen: validation stops 4-blocks)
-    if(people.length===0) people=[0,1,2,3];
-    return people;
+    // people not blocked; if everyone is blocked, return [] → match goes unassigned
+    return [0,1,2,3].filter(p=>!blocked.has(p));
   }
 
   const assign=[];
@@ -534,12 +532,13 @@ function render(assign, isFreshDraw){
 
 // dropdown for a seat, marking manual changes
 function seatSelect(matchIdx, seatNum, current){
-  let opts='';
+  let opts=`<option value="-1" ${current<0?'selected':''}>— Ningú —</option>`;
   for(let p=0;p<4;p++){
     opts+=`<option value="${p}" ${p===current?'selected':''}>${names[p]}</option>`;
   }
+  const border = current<0 ? 'var(--muted)' : COLORS[current];
   return `<select class="seat-select" data-match="${matchIdx}" data-seat="${seatNum}"
-            style="border-left:4px solid ${COLORS[current]}">${opts}</select>`;
+            style="border-left:4px solid ${border}">${opts}</select>`;
 }
 
 function renderTable(){
@@ -555,10 +554,12 @@ function renderTable(){
       [a.s1,a.s2].sort().join('-') !== [orig.s1,orig.s2].sort().join('-')
     );
     const tr=document.createElement('tr');
+    const unassigned = a.s1<0 && a.s2<0;
     if(changed) tr.style.background='#fff8e8';
+    if(unassigned) tr.style.background='#f0eee9';
     tr.innerHTML=`
       <td style="font-size:12px;color:var(--muted)">${m.jor}</td>
-      <td><b>${m.part}</b>${m.data!=='—'?`<br><span style="font-size:11px;color:var(--muted)">${m.data}</span>`:''}${changed?'<br><span style="font-size:10px;color:var(--sand);font-weight:700">✎ CANVIAT</span>':''}</td>
+      <td><b>${m.part}</b>${m.data!=='—'?`<br><span style="font-size:11px;color:var(--muted)">${m.data}</span>`:''}${changed?'<br><span style="font-size:10px;color:var(--sand);font-weight:700">✎ CANVIAT</span>':''}${unassigned?'<br><span style="font-size:10px;color:var(--muted);font-weight:700">⚠ SENSE COBRIR</span>':''}</td>
       <td class="hide-m"><span class="cat-pill ${catClass(m.cat)}">${m.cat}</span></td>
       <td class="preu">${m.preu.toFixed(2)} €</td>
       <td>${seatSelect(i,1,a.s1)}</td>
@@ -587,17 +588,21 @@ function renderBalance(){
   // current (real) balance. Count seats (for value) and distinct matches attended.
   const stat=[0,1,2,3].map(()=>({seats:0,matches:0,val:0}));
   currentAssign.forEach(a=>{
-    const attendees = a.s1===a.s2 ? [a.s1] : [a.s1,a.s2]; // one person on both seats = 1 attendee
-    // value: each seat is half the price, wherever it lands
-    stat[a.s1].val+=a.preu/2; stat[a.s1].seats++;
-    stat[a.s2].val+=a.preu/2; stat[a.s2].seats++;
+    // skip seats with nobody (-1)
+    const s1ok = a.s1>=0, s2ok = a.s2>=0;
+    const attendees = [];
+    if(s1ok) attendees.push(a.s1);
+    if(s2ok && a.s2!==a.s1) attendees.push(a.s2);
+    if(s1ok){ stat[a.s1].val+=a.preu/2; stat[a.s1].seats++; }
+    if(s2ok){ stat[a.s2].val+=a.preu/2; stat[a.s2].seats++; }
     attendees.forEach(p=>stat[p].matches++);
   });
   // original balance (what the draw said each should pay) for debt
   const origVal=[0,0,0,0];
   (originalAssign||[]).forEach(a=>{
     const m=MATCHES[a.idx];
-    origVal[a.s1]+=m.preu/2; origVal[a.s2]+=m.preu/2;
+    if(a.s1>=0) origVal[a.s1]+=m.preu/2;
+    if(a.s2>=0) origVal[a.s2]+=m.preu/2;
   });
   const anyChange = originalAssign && JSON.stringify(originalAssign.map(a=>[a.idx,a.s1,a.s2]))
                     !== JSON.stringify(currentAssign.map(a=>[a.idx,a.s1,a.s2]));
