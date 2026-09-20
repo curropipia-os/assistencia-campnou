@@ -16,15 +16,19 @@
        data jsonb not null default '{}'::jsonb,
        creat_el timestamptz default now()
      );
-     insert into sorteig_resultat (id, data) values (1, '{}') on conflict do nothing;
+     insert into sorteig_resultat (id, data) values (1, '{}'), (2, '{}'), (3, '{}') on conflict do nothing;
      alter table sorteig_resultat enable row level security;
      create policy "lectura publica" on sorteig_resultat for select using (true);
      create policy "escriptura publica" on sorteig_resultat for insert with check (true);
      create policy "actualitzacio publica" on sorteig_resultat for update using (true);
 
-  3. Ves a "Project Settings" -> "API" i copia:
-     - "Project URL"      -> enganxa'l a SUPABASE_URL més avall
-     - "anon public" key  -> enganxa'l a SUPABASE_ANON_KEY més avall
+  3. Ves a "Project Settings" -> "API Keys" i copia:
+     - "Project URL"        -> enganxa'l a SUPABASE_URL més avall
+     - "Publishable key"    -> enganxa'l a SUPABASE_ANON_KEY més avall
+       (Supabase ho anomenava abans "anon public key"; és el mateix ús,
+        només ha canviat el nom. NO facis servir la "Secret key" ni el
+        "service_role": aquestes són per a servidors, no per a una pàgina
+        web que qualsevol pot obrir.)
   4. Desa l'arxiu i puja'l a GitHub Pages (o qualsevol hosting estàtic). Ja està.
   ============================================================
 -->
@@ -119,6 +123,17 @@
   .sync-wait{background:#fdf3dd;color:#8a5a00;border:1px solid var(--or)}
   .sync-off{background:#fbe6e9;color:var(--grana);border:1px solid var(--grana)}
   .sync-dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+  .mode-select{display:grid;gap:8px;grid-template-columns:1fr}
+  @media(min-width:640px){.mode-select{grid-template-columns:1fr 1fr 1fr}}
+  .mode-btn{text-align:left;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;background:#fff;transition:.15s;display:flex;flex-direction:column;gap:3px}
+  .mode-btn b{font-size:14px}
+  .mode-btn span{font-size:11.5px;color:var(--muted);line-height:1.35}
+  .mode-btn:hover{border-color:var(--sea-bright)}
+  .mode-btn.on{border-color:var(--grana);background:#fdf0f3;box-shadow:0 0 0 1px var(--grana) inset}
+  .seat-select{padding:5px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-weight:700;background:#fff;cursor:pointer;font-family:inherit;max-width:110px}
+  .seat-select:focus{outline:2px solid var(--sea-bright);outline-offset:-1px}
+  .collapse-btn{font-size:11px;font-weight:700;color:var(--ink-soft);border:1px solid var(--line);border-radius:99px;padding:4px 11px;background:#fff;letter-spacing:.02em}
+  .collapse-btn:hover{border-color:var(--sea-bright);color:var(--ink)}
   .cat-legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
   .cat-count{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:8px;font-size:12.5px;font-weight:600;border:1px solid var(--line)}
   .cat-count b{font-variant-numeric:tabular-nums;font-size:14px}
@@ -168,7 +183,25 @@
   </section>
 
   <section class="card">
-    <div class="step-label"><span class="step-num">1</span> Els 4 participants</div>
+    <div class="step-label"><span class="step-num">1</span> Quin sorteig vols fer?</div>
+    <div class="mode-select" id="modeSelect">
+      <button class="mode-btn on" data-mode="regular">
+        <b>Fase regular</b>
+        <span>19 Lliga + 4 fase lliga Champions · el sorteig inicial de la temporada</span>
+      </button>
+      <button class="mode-btn" data-mode="champions">
+        <b>Eliminatòries Champions</b>
+        <span>Vuitens, Quarts i Semis · quan es confirmin. Qui va al Madrid no va a Vuitens</span>
+      </button>
+      <button class="mode-btn" data-mode="copa">
+        <b>Eliminatòries Copa</b>
+        <span>Quarts i Semis de Copa · quan es confirmin</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="step-label"><span class="step-num">2</span> Els 4 participants</div>
     <div class="names">
       <input id="n0" placeholder="Nom 1" value="Berni">
       <input id="n1" placeholder="Nom 2" value="Carol">
@@ -178,42 +211,49 @@
     <div class="row-btns">
       <button class="btn-primary" id="drawBtn">Sortejar ordre i repartir</button>
       <button class="btn-ghost" id="resetBtn">Reiniciar</button>
+      <button class="btn-ghost" id="wipeBtn" style="color:var(--grana);border-color:var(--grana)">Esborrar aquest sorteig del núvol</button>
     </div>
     <div id="orderZone" class="hidden">
-      <div class="step-label" style="margin-top:20px"><span class="step-num">2</span> Ordre de tria sortejat</div>
+      <div class="step-label" style="margin-top:20px"><span class="step-num">3</span> Ordre de tria sortejat</div>
       <div class="order-chips" id="orderChips"></div>
       <div class="clasic-box" id="clasicBox"></div>
     </div>
   </section>
 
   <section class="card" style="margin-top:18px">
-    <div class="step-label"><span class="step-num">✗</span> Restriccions de disponibilitat (opcional)</div>
-    <p class="hint" style="margin-top:0">Marca qui <b>NO</b> pot anar a cada partit. El sorteig no li assignarà aquell partit. Deixa-ho en blanc si tothom pot anar-hi.</p>
-    <div style="overflow-x:auto;margin-top:12px">
-      <table id="blockTable">
-        <thead>
-          <tr>
-            <th>J</th>
-            <th>Partit</th>
-            <th id="bh0" style="text-align:center">P1</th>
-            <th id="bh1" style="text-align:center">P2</th>
-            <th id="bh2" style="text-align:center">P3</th>
-            <th id="bh3" style="text-align:center">P4</th>
-          </tr>
-        </thead>
-        <tbody id="blockBody"></tbody>
-      </table>
+    <div class="step-label" style="justify-content:space-between;display:flex;align-items:center">
+      <span><span class="step-num">✗</span> Restriccions de disponibilitat (opcional)</span>
+      <button id="blockToggle" class="collapse-btn" aria-expanded="true">Amaga ▲</button>
+    </div>
+    <div id="blockPanel">
+      <p class="hint" style="margin-top:0">Marca qui <b>NO</b> pot anar a cada partit. El sorteig no li assignarà aquell partit. Deixa-ho en blanc si tothom pot anar-hi.</p>
+      <div style="overflow-x:auto;margin-top:12px">
+        <table id="blockTable">
+          <thead>
+            <tr>
+              <th>J</th>
+              <th>Partit</th>
+              <th id="bh0" style="text-align:center">P1</th>
+              <th id="bh1" style="text-align:center">P2</th>
+              <th id="bh2" style="text-align:center">P3</th>
+              <th id="bh3" style="text-align:center">P4</th>
+            </tr>
+          </thead>
+          <tbody id="blockBody"></tbody>
+        </table>
+      </div>
     </div>
   </section>
 
   <section class="card" style="margin-top:18px">
     <div class="step-label"><span class="step-num">i</span> Partits de casa per categoria</div>
-    <p class="hint" style="margin-top:0">Aquests són els 27 partits a repartir (18 de Lliga + rondes europees/Copa estimades). Busqueu que cadascú acumuli un mix semblant de cada categoria, no només el mateix nombre.</p>
+    <p class="hint" style="margin-top:0">Aquests són els 28 partits a repartir (19 de Lliga + rondes europees/Copa estimades). Busqueu que cadascú acumuli un mix semblant de cada categoria, no només el mateix nombre.</p>
     <div class="cat-legend" id="catLegendMain" style="margin-top:12px"></div>
   </section>
 
   <section id="tableSection" class="card hidden">
     <div class="step-label"><span class="step-num">3</span> Repartiment partit a partit</div>
+    <p class="hint" style="margin-top:0">Pots canviar qui va a cada partit amb els desplegables (per exemple si algú no pot anar-hi un cap de setmana). El saldo de sota s'actualitza sol i es desa al núvol. Els partits modificats es marquen en groc.</p>
     <div class="legend">
       <span><span class="dot" style="background:var(--p1)"></span><b id="lg0">P1</b></span>
       <span><span class="dot" style="background:var(--p2)"></span><b id="lg1">P2</b></span>
@@ -260,8 +300,8 @@
 // ============================================================
 // CONFIGURACIÓ SUPABASE — enganxa aquí les teves claus (veure instruccions al <head>)
 // ============================================================
-const SUPABASE_URL = https://frmnwjvukqlzxvrbmfgs.supabase.co;
-const SUPABASE_ANON_KEY = sb_publishable_R6KeIUeh_EGYJjdTn5gD-g_5ub-wKmq';
+const SUPABASE_URL = 'https://frmnwjvukqlzxvrbmfgs.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZybW53anZ1a3Fsenh2cmJtZmdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3Nzk3NjEsImV4cCI6MjEwMTM1NTc2MX0.CxR6YLNT3dT7sLMDYGyrvnXzQnmYZrywD7P0c8aIuCE';
 
 let sb = null;
 let cloudReady = false;
@@ -279,44 +319,69 @@ function setSyncStatus(state, text){
 }
 
 const MATCHES = [
-  {comp:"Lliga",jor:"J1",data:"16/08/26",part:"Athletic",cat:"Taronja (Mitjà)",preu:96.20},
-  {comp:"Lliga",jor:"J3",data:"30/08/26",part:"Rayo Vallecano",cat:"Groc (Baix)",preu:13.74},
-  {comp:"Lliga",jor:"J6",data:"16/09/26",part:"Racing Santander",cat:"Groc (Baix)",preu:13.74},
-  {comp:"Lliga",jor:"J8",data:"11/10/26",part:"Getafe",cat:"Blau (Mitjà)",preu:41.23},
-  {comp:"Lliga",jor:"J10",data:"25/10/26",part:"Real Madrid",cat:"Vermell (Top)",preu:164.92},
-  {comp:"Lliga",jor:"J11",data:"01/11/26",part:"Alavés",cat:"Groc (Baix)",preu:13.74},
-  {comp:"Lliga",jor:"J13",data:"22/11/26",part:"Villarreal",cat:"Taronja (Mitjà)",preu:68.72},
-  {comp:"Lliga",jor:"J15",data:"06/12/26",part:"Celta",cat:"Groc (Baix)",preu:13.74},
-  {comp:"Lliga",jor:"J17",data:"20/12/26",part:"Reial Societat",cat:"Blau (Mitjà)",preu:41.23},
-  {comp:"Lliga",jor:"J20",data:"17/01/27",part:"Elx",cat:"Groc (Baix)",preu:13.74},
-  {comp:"Lliga",jor:"J22",data:"31/01/27",part:"València",cat:"Blau (Mitjà)",preu:54.97},
-  {comp:"Lliga",jor:"J23",data:"07/02/27",part:"Atlético Madrid",cat:"Vermell (Top)",preu:109.94},
-  {comp:"Lliga",jor:"J25",data:"21/02/27",part:"Llevant",cat:"Groc (Baix)",preu:13.74},
-  {comp:"Lliga",jor:"J27",data:"07/03/27",part:"Betis",cat:"Taronja (Mitjà)",preu:68.72},
-  {comp:"Lliga",jor:"J28",data:"14/03/27",part:"Deportivo",cat:"Groc (Baix)",preu:13.74},
-  {comp:"Lliga",jor:"J30",data:"04/04/27",part:"Sevilla",cat:"Blau (Mitjà)",preu:54.97},
-  {comp:"Lliga",jor:"J32",data:"18/04/27",part:"Espanyol",cat:"Taronja (Mitjà)",preu:96.20},
-  {comp:"Lliga",jor:"J34",data:"02/05/27",part:"Osasuna",cat:"Groc (Baix)",preu:13.74},
-  {comp:"Lliga",jor:"J37",data:"23/05/27",part:"Málaga",cat:"Groc (Baix)",preu:13.74},
-  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 1 (top)",cat:"Champions",preu:137.43},
-  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 2",cat:"Champions",preu:54.97},
-  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 3",cat:"Champions",preu:41.23},
-  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 4",cat:"Champions",preu:27.49},
-  {comp:"Champions",jor:"—",data:"—",part:"Vuitens",cat:"Champions",preu:68.72},
-  {comp:"Champions",jor:"—",data:"—",part:"Quarts",cat:"Champions",preu:68.72},
-  {comp:"Champions",jor:"—",data:"—",part:"Semis",cat:"Champions",preu:82.46},
-  {comp:"Copa",jor:"—",data:"—",part:"Quarts",cat:"Copa",preu:27.49},
-  {comp:"Copa",jor:"—",data:"—",part:"Semis",cat:"Copa",preu:68.72},
+  {comp:"Lliga",jor:"J1",data:"16/08/26",part:"Athletic",cat:"Taronja (Mitjà)",preu:95.33},
+  {comp:"Lliga",jor:"J3",data:"30/08/26",part:"Rayo Vallecano",cat:"Groc (Baix)",preu:13.62},
+  {comp:"Lliga",jor:"J6",data:"16/09/26",part:"Racing Santander",cat:"Groc (Baix)",preu:13.62},
+  {comp:"Lliga",jor:"J8",data:"11/10/26",part:"Getafe",cat:"Blau (Mitjà)",preu:40.85},
+  {comp:"Lliga",jor:"J10",data:"25/10/26",part:"Real Madrid",cat:"Vermell (Top)",preu:163.42},
+  {comp:"Lliga",jor:"J11",data:"01/11/26",part:"Alavés",cat:"Groc (Baix)",preu:13.62},
+  {comp:"Lliga",jor:"J13",data:"22/11/26",part:"Villarreal",cat:"Taronja (Mitjà)",preu:68.09},
+  {comp:"Lliga",jor:"J15",data:"06/12/26",part:"Celta",cat:"Groc (Baix)",preu:13.62},
+  {comp:"Lliga",jor:"J17",data:"20/12/26",part:"Reial Societat",cat:"Blau (Mitjà)",preu:40.85},
+  {comp:"Lliga",jor:"J20",data:"17/01/27",part:"Elx",cat:"Groc (Baix)",preu:13.62},
+  {comp:"Lliga",jor:"J22",data:"31/01/27",part:"València",cat:"Blau (Mitjà)",preu:54.47},
+  {comp:"Lliga",jor:"J23",data:"07/02/27",part:"Atlético Madrid",cat:"Vermell (Top)",preu:108.95},
+  {comp:"Lliga",jor:"J25",data:"21/02/27",part:"Llevant",cat:"Groc (Baix)",preu:13.62},
+  {comp:"Lliga",jor:"J27",data:"07/03/27",part:"Betis",cat:"Taronja (Mitjà)",preu:68.09},
+  {comp:"Lliga",jor:"J28",data:"14/03/27",part:"Deportivo",cat:"Groc (Baix)",preu:13.62},
+  {comp:"Lliga",jor:"J30",data:"04/04/27",part:"Sevilla",cat:"Blau (Mitjà)",preu:54.47},
+  {comp:"Lliga",jor:"J32",data:"18/04/27",part:"Espanyol",cat:"Taronja (Mitjà)",preu:95.33},
+  {comp:"Lliga",jor:"J34",data:"02/05/27",part:"Osasuna",cat:"Groc (Baix)",preu:13.62},
+  {comp:"Lliga",jor:"J37",data:"23/05/27",part:"Málaga",cat:"Groc (Baix)",preu:13.62},
+  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 1 (top)",cat:"Champions",preu:81.71},
+  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 2",cat:"Champions",preu:54.47},
+  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 3",cat:"Champions",preu:40.85},
+  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 4",cat:"Champions",preu:27.24},
+  {comp:"Champions",jor:"—",data:"—",part:"Vuitens",cat:"Champions",preu:68.09},
+  {comp:"Champions",jor:"—",data:"—",part:"Quarts",cat:"Champions",preu:95.33},
+  {comp:"Champions",jor:"—",data:"—",part:"Semis",cat:"Champions",preu:122.56},
+  {comp:"Copa",jor:"—",data:"—",part:"Quarts",cat:"Copa",preu:27.24},
+  {comp:"Copa",jor:"—",data:"—",part:"Semis",cat:"Copa",preu:68.09},
 ];
 const SOCI = 125;
 const COLORS = ['var(--p1)','var(--p2)','var(--p3)','var(--p4)'];
 let names = [];
 let order = [];
+// originalAssign = the pure draw result (baseline for debt); currentAssign = after manual edits
+let originalAssign = null;
+let currentAssign = null;
+// blocks[matchIdx] = Set of person indices who CANNOT attend that match
+let blocks = {};
+// current draw mode: 'regular' | 'champions' | 'copa'
+let mode = 'regular';
+// who got the Real Madrid seats in the regular draw (persisted), for the champions rule
+let rmWinners = null;
+
+// which matches belong to each mode
+function matchesForMode(mo){
+  const list = MATCHES.map((m,i)=>({...m,idx:i}));
+  if(mo==='regular'){
+    // Lliga + Champions league phase (Lligueta), NOT the knockouts
+    return list.filter(m=> m.comp==='Lliga' || (m.comp==='Champions' && m.part.startsWith('Lligueta')));
+  }
+  if(mo==='champions'){
+    return list.filter(m=> m.comp==='Champions' && (m.part==='Vuitens' || m.part==='Quarts' || m.part==='Semis'));
+  }
+  if(mo==='copa'){
+    return list.filter(m=> m.comp==='Copa');
+  }
+  return list;
+}
 
 // Category count legend (rendered on load)
 function renderCatLegend(){
   const cats={};
-  MATCHES.forEach(m=>{
+  matchesForMode(mode).forEach(m=>{
     let key;
     if(m.cat.startsWith('Vermell')) key='Vermell (Top)';
     else if(m.cat.startsWith('Taronja')) key='Taronja (Mitjà-alt)';
@@ -342,7 +407,9 @@ renderCatLegend();
 function renderBlockGrid(){
   const body=document.getElementById('blockBody');
   body.innerHTML='';
+  const poolIdx=new Set(matchesForMode(mode).map(m=>m.idx));
   MATCHES.forEach((m,i)=>{
+    if(!poolIdx.has(i)) return; // only matches in the current mode
     const tr=document.createElement('tr');
     let checks='';
     for(let p=0;p<4;p++){
@@ -362,10 +429,9 @@ function readBlocks(){
     if(!blocks[mi]) blocks[mi]=new Set();
     blocks[mi].add(pe);
   });
-  // validate: no match may block 3+ (need at least 2 to fill seats)
-  const bad=[];
-  Object.entries(blocks).forEach(([mi,set])=>{ if(set.size>2) bad.push(MATCHES[mi].part); });
-  return bad;
+  // No validation needed: 1 free person takes both seats; 0 free means the
+  // match is left unassigned ("ningú"), to be resolved by the group off-system.
+  return [];
 }
 // keep header labels in sync with names
 function syncBlockHeaders(){
@@ -387,102 +453,248 @@ function catClass(cat){
 }
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 
-// Snake draft with 2 seats per match.
-// We build a pick sequence: for each seat-slot across all matches, cycle through
-// snake order. Matches sorted desc by price. Each match takes the next 2 distinct
-// picks from the snake sequence (so 2 different people per match).
-// blocks[matchIdx] = Set of person indices who CANNOT attend that match
-let blocks = {};
-
 function distribute(){
-  const sorted = MATCHES.map((m,i)=>({...m,idx:i})).sort((a,b)=>b.preu-a.preu);
-  // running accumulated value per person, to keep balance tight
-  const val=[0,0,0,0];
-  const cnt=[0,0,0,0];
-  // tie-break order comes from the sorteig ('order'): earlier in order = priority
+  const pool = matchesForMode(mode).sort((a,b)=>b.preu-a.preu);
+  const val=[0,0,0,0];   // accumulated value per person
+  const cnt=[0,0,0,0];   // match count per person
+  const pairCount={};    // 'a-b' -> times those two have gone together
   const priority={}; order.forEach((p,rank)=>priority[p]=rank);
+  const pk=(a,b)=>[a,b].sort((x,y)=>x-y).join('-');
+
+  function pickPair(m, people){
+    // nobody free → match left unassigned ("ningú"), seats = -1
+    if(people.length===0){ return {a:-1, b:-1}; }
+    // only one person free → they take BOTH seats
+    if(people.length===1){ return {a:people[0], b:people[0]}; }
+    let best=null;
+    for(let i=0;i<people.length;i++){
+      for(let j=i+1;j<people.length;j++){
+        const a=people[i], b=people[j];
+        const nv=[...val]; nv[a]+=m.preu/2; nv[b]+=m.preu/2;
+        const spread=Math.max(...nv)-Math.min(...nv);
+        const together=pairCount[pk(a,b)]||0;
+        const score = together*1000 + spread + (priority[a]+priority[b])*0.01 + Math.random()*0.001;
+        if(!best || score<best.score) best={a,b,score};
+      }
+    }
+    return best;
+  }
+  function commit(m, s1, s2){
+    if(s1>=0){ val[s1]+=m.preu/2; cnt[s1]++; }
+    if(s2>=0){ val[s2]+=m.preu/2; cnt[s2]++; }
+    if(s1>=0 && s2>=0) pairCount[pk(s1,s2)]=(pairCount[pk(s1,s2)]||0)+1;
+    assign.push({...m,s1,s2});
+  }
+  function eligibleFor(m){
+    const blocked = blocks[m.idx] || new Set();
+    // people not blocked; if everyone is blocked, return [] → match goes unassigned
+    return [0,1,2,3].filter(p=>!blocked.has(p));
+  }
 
   const assign=[];
-  for(const m of sorted){
-    const blocked = blocks[m.idx] || new Set();
-    let eligible=[0,1,2,3].filter(p=>!blocked.has(p));
-    // safety: if fewer than 2 eligible, relax (should not happen with <=2 blocks)
-    if(eligible.length<2) eligible=[0,1,2,3];
-    // choose the 2 eligible people with lowest accumulated value;
-    // tie-break by fewer matches, then by sorteig priority, then random
-    const pick=[...eligible].sort((a,b)=>
-      val[a]-val[b] || cnt[a]-cnt[b] || priority[a]-priority[b] || (Math.random()-0.5)
-    );
-    const s1=pick[0], s2=pick[1];
-    val[s1]+=m.preu/2; val[s2]+=m.preu/2;
-    cnt[s1]++; cnt[s2]++;
-    assign.push({...m,s1,s2});
+
+  // CHAMPIONS knockouts: the only rule is "whoever got Real Madrid can't go to Vuitens".
+  // We pre-assign Vuitens first, excluding the Madrid winners, then the rest freely.
+  if(mode==='champions'){
+    const vuitensMatch = pool.find(m=>m.part==='Vuitens');
+    if(vuitensMatch){
+      let people=eligibleFor(vuitensMatch);
+      if(rmWinners){
+        const pref=people.filter(p=>!rmWinners.has(p));
+        if(pref.length>=2) people=pref;
+      }
+      const b=pickPair(vuitensMatch, people);
+      commit(vuitensMatch, b.a, b.b);
+    }
+    const done=new Set(assign.map(a=>a.idx));
+    for(const m of pool){
+      if(done.has(m.idx)) continue;
+      const best=pickPair(m, eligibleFor(m));
+      commit(m, best.a, best.b);
+    }
+    return assign;
+  }
+
+  // REGULAR and COPA: simple balanced distribution with pair rotation, no special rules.
+  for(const m of pool){
+    const best=pickPair(m, eligibleFor(m));
+    commit(m, best.a, best.b);
   }
   return assign;
 }
 
-function render(assign){
-  // table
+// Render the results. `assign` is the current (possibly manually edited) assignment.
+// If it's a fresh draw, we also snapshot it as the baseline (originalAssign).
+function render(assign, isFreshDraw){
+  currentAssign = assign;
+  if(isFreshDraw){
+    // deep copy as the immutable baseline for debt calculation
+    originalAssign = assign.map(a=>({idx:a.idx, s1:a.s1, s2:a.s2}));
+  }
+  renderTable();
+  renderBalance();
+  document.getElementById('tableSection').classList.remove('hidden');
+  document.getElementById('balanceSection').classList.remove('hidden');
+  // a draw exists → collapse the restrictions panel to reduce clutter
+  setBlockPanel(false);
+}
+
+// dropdown for a seat, marking manual changes. `orig` = original occupant of this seat (or undefined)
+function seatSelect(matchIdx, seatNum, current, orig){
+  let opts=`<option value="-1" ${current<0?'selected':''}>— Ningú —</option>`;
+  for(let p=0;p<4;p++){
+    opts+=`<option value="${p}" ${p===current?'selected':''}>${names[p]}</option>`;
+  }
+  const border = current<0 ? 'var(--muted)' : COLORS[current];
+  const sel = `<select class="seat-select" data-match="${matchIdx}" data-seat="${seatNum}"
+            style="border-left:4px solid ${border}">${opts}</select>`;
+  // note the original attendee when this seat has changed
+  let note='';
+  if(orig!==undefined && orig!==current){
+    const origName = orig<0 ? 'Ningú' : names[orig];
+    note = `<div style="font-size:10.5px;color:var(--muted);margin-top:3px">abans: <b style="color:${orig<0?'var(--muted)':COLORS[orig]}">${origName}</b></div>`;
+  }
+  return sel + note;
+}
+
+function renderTable(){
   const body=document.getElementById('matchBody');
   body.innerHTML='';
-  // keep original catalogue order for display (nicer), map assignment by idx
-  const byIdx={}; assign.forEach(a=>byIdx[a.idx]=a);
+  const byIdx={}; currentAssign.forEach(a=>byIdx[a.idx]=a);
+  const origByIdx={}; (originalAssign||[]).forEach(a=>origByIdx[a.idx]=a);
   MATCHES.forEach((m,i)=>{
     const a=byIdx[i];
+    if(!a) return;
+    const orig=origByIdx[i];
+    const changed = orig && (
+      [a.s1,a.s2].sort().join('-') !== [orig.s1,orig.s2].sort().join('-')
+    );
     const tr=document.createElement('tr');
+    const unassigned = a.s1<0 && a.s2<0;
+    if(changed) tr.style.background='#fff8e8';
+    if(unassigned) tr.style.background='#f0eee9';
     tr.innerHTML=`
       <td style="font-size:12px;color:var(--muted)">${m.jor}</td>
-      <td><b>${m.part}</b>${m.data!=='—'?`<br><span style="font-size:11px;color:var(--muted)">${m.data}</span>`:''}</td>
+      <td><b>${m.part}</b>${m.data!=='—'?`<br><span style="font-size:11px;color:var(--muted)">${m.data}</span>`:''}${changed?'<br><span style="font-size:10px;color:var(--sand);font-weight:700">✎ CANVIAT</span>':''}${unassigned?'<br><span style="font-size:10px;color:var(--muted);font-weight:700">⚠ SENSE COBRIR</span>':''}</td>
       <td class="hide-m"><span class="cat-pill ${catClass(m.cat)}">${m.cat}</span></td>
       <td class="preu">${m.preu.toFixed(2)} €</td>
-      <td><span class="seat" style="background:${COLORS[a.s1]}">${names[a.s1]}</span></td>
-      <td><span class="seat" style="background:${COLORS[a.s2]}">${names[a.s2]}</span></td>`;
+      <td>${seatSelect(i,1,a.s1, changed&&orig?orig.s1:undefined)}</td>
+      <td>${seatSelect(i,2,a.s2, changed&&orig?orig.s2:undefined)}</td>`;
     body.appendChild(tr);
   });
-  document.getElementById('tableSection').classList.remove('hidden');
-
-  // balance
-  const stat=[0,1,2,3].map(()=>({n:0,val:0}));
-  assign.forEach(a=>{
-    stat[a.s1].n++; stat[a.s1].val+=a.preu/2;
-    stat[a.s2].n++; stat[a.s2].val+=a.preu/2;
+  // wire up the selects
+  body.querySelectorAll('.seat-select').forEach(sel=>{
+    sel.addEventListener('change',()=>onSeatChange(sel));
   });
+}
+
+function onSeatChange(sel){
+  const mi=+sel.dataset.match, seat=+sel.dataset.seat, val=+sel.value;
+  const a=currentAssign.find(x=>x.idx===mi);
+  if(!a) return;
+  // the same person MAY take both seats (e.g. going with a child) —
+  // in that case they absorb the full value of the match (two halves).
+  if(seat===1) a.s1=val; else a.s2=val;
+  renderTable();
+  renderBalance();
+  saveDraw(currentAssign); // persist the manual change to the cloud
+}
+
+function renderBalance(){
+  // current (real) balance. Count seats (for value) and distinct matches attended.
+  const stat=[0,1,2,3].map(()=>({seats:0,matches:0,val:0}));
+  currentAssign.forEach(a=>{
+    // skip seats with nobody (-1)
+    const s1ok = a.s1>=0, s2ok = a.s2>=0;
+    const attendees = [];
+    if(s1ok) attendees.push(a.s1);
+    if(s2ok && a.s2!==a.s1) attendees.push(a.s2);
+    if(s1ok){ stat[a.s1].val+=a.preu/2; stat[a.s1].seats++; }
+    if(s2ok){ stat[a.s2].val+=a.preu/2; stat[a.s2].seats++; }
+    attendees.forEach(p=>stat[p].matches++);
+  });
+  // original balance (what the draw said each should pay) for debt
+  const origVal=[0,0,0,0];
+  (originalAssign||[]).forEach(a=>{
+    const m=MATCHES[a.idx];
+    if(a.s1>=0) origVal[a.s1]+=m.preu/2;
+    if(a.s2>=0) origVal[a.s2]+=m.preu/2;
+  });
+  const anyChange = originalAssign && JSON.stringify(originalAssign.map(a=>[a.idx,a.s1,a.s2]))
+                    !== JSON.stringify(currentAssign.map(a=>[a.idx,a.s1,a.s2]));
+
   const cards=document.getElementById('balanceCards');
   cards.innerHTML='';
   stat.forEach((s,i)=>{
     const total=s.val+SOCI;
+    // debt: positive = has paid MORE than the draw assigned (others owe them);
+    //       negative = has paid LESS (they owe others)
+    const debt = s.val - origVal[i];
+    let debtHtml='';
+    if(anyChange){
+      const sign = debt>0.005 ? '+' : (debt<-0.005 ? '−' : '');
+      const col = debt>0.005 ? '#1a7a4c' : (debt<-0.005 ? 'var(--grana)' : 'var(--muted)');
+      const txt = Math.abs(debt)<0.005 ? 'en paus' : sign+Math.abs(debt).toFixed(2)+' €';
+      debtHtml=`<div class="bstat" style="border-top:1px dashed var(--line);margin-top:4px;padding-top:4px">
+        <span>Saldo vs sorteig</span><span class="v" style="color:${col}">${txt}</span></div>`;
+    }
+    // show "matches (seats)" only when they differ, so a double-seat is visible
+    const partitsTxt = s.seats>s.matches ? `${s.matches} <span style="font-weight:400;color:var(--muted);font-size:11px">(${s.seats} seients)</span>` : `${s.matches}`;
     const d=document.createElement('div');
     d.className='bcard p'+i;
     d.innerHTML=`
       <div class="bname">${names[i]}</div>
-      <div class="bstat"><span>Partits</span><span class="v">${s.n}</span></div>
+      <div class="bstat"><span>Partits</span><span class="v">${partitsTxt}</span></div>
       <div class="bstat"><span>Valor partits</span><span class="v">${s.val.toFixed(2)} €</span></div>
       <div class="bstat"><span>Carnet soci</span><span class="v">${SOCI.toFixed(2)} €</span></div>
-      <div class="bstat btotal"><span>TOTAL a pagar</span><span class="v">${total.toFixed(2)} €</span></div>`;
+      <div class="bstat btotal"><span>TOTAL a pagar</span><span class="v">${total.toFixed(2)} €</span></div>
+      ${debtHtml}`;
     cards.appendChild(d);
   });
   const vals=stat.map(s=>s.val);
   const dev=Math.max(...vals)-Math.min(...vals);
   const bar=document.getElementById('devBar');
   let cls='dev-good',msg='Repartiment molt equilibrat';
-  if(dev>30){cls='dev-bad';msg='Desequilibrat — repeteix el sorteig o ajusta manualment';}
+  if(dev>30){cls='dev-bad';msg='Desequilibrat — ajusta o compensa amb un altre partit';}
   else if(dev>15){cls='dev-mid';msg='Acceptable — es pot afinar';}
   bar.className='devbar '+cls;
-  bar.innerHTML=`<span>${msg}</span><span>Desviació màx.: <span class="dev-val">${dev.toFixed(2)} €</span></span>`;
-  document.getElementById('balanceSection').classList.remove('hidden');
+  let debtNote = anyChange ? ' · saldo per canvis manuals actiu' : '';
+  bar.innerHTML=`<span>${msg}${debtNote}</span><span>Desviació màx.: <span class="dev-val">${dev.toFixed(2)} €</span></span>`;
 }
 
-let hasSavedDraw = false;
+let hasSavedDraw = {regular:false, champions:false, copa:false};
+const MODE_ROW = {regular:1, champions:2, copa:3};
+const MODE_LABEL = {regular:'Fase regular', champions:'Eliminatòries Champions', copa:'Eliminatòries Copa'};
+
+function updateClasicBox(){
+  const box=document.getElementById('clasicBox');
+  if(mode==='regular'){
+    box.innerHTML = `<b>Nota:</b> aquest és el sorteig inicial de la temporada (Lliga + fase lliga de Champions). `+
+      `Les eliminatòries de Champions i Copa es sortegen a part quan es confirmin, des del selector de dalt.`;
+  } else if(mode==='champions'){
+    const known = rmWinners ? `Qui va al Madrid (<b>${[...rmWinners].map(i=>names[i]).join(' i ')}</b>) queda exclòs dels Vuitens.` :
+      `Encara no consta qui va al Madrid al sorteig de fase regular; fes-lo primer perquè s'apliqui la regla.`;
+    box.innerHTML = `<b>Eliminatòries Champions.</b> `+known;
+  } else {
+    box.innerHTML = `<b>Eliminatòries Copa.</b> Repartiment equilibrat, sense regles especials.`;
+  }
+}
 
 async function draw(askConfirm){
-  if(askConfirm && hasSavedDraw){
-    const ok = confirm('Ja hi ha un sorteig guardat al núvol, visible pels 4. Si en fas un de nou, el sobreescriuràs per a tothom.\n\nVols continuar?');
+  if(askConfirm && hasSavedDraw[mode]){
+    const ok = confirm(`Ja hi ha un sorteig de "${MODE_LABEL[mode]}" guardat al núvol, visible pels 4. Si en fas un de nou, el sobreescriuràs per a tothom.\n\nVols continuar?`);
     if(!ok) return;
   }
   names=[0,1,2,3].map(i=>document.getElementById('n'+i).value.trim()||('Persona '+(i+1)));
+
+  // For champions mode, make sure we know who got Madrid (load the regular draw if needed)
+  if(mode==='champions' && !rmWinners){
+    await loadRmWinners();
+  }
+
   const badMatches=readBlocks();
   if(badMatches.length){
-    alert('Atenció: aquests partits tenen 3 o més persones bloquejades, i calen mínim 2 lliures per omplir els 2 seients:\n\n'+badMatches.join(', ')+'\n\nDesmarca alguna restricció abans de sortejar.');
+    alert('Atenció: aquests partits tenen les 4 persones bloquejades, i cal com a mínim 1 persona lliure:\n\n'+badMatches.join(', ')+'\n\nDesmarca alguna restricció abans de sortejar.');
     return;
   }
   order=shuffle([0,1,2,3]);
@@ -496,13 +708,11 @@ async function draw(askConfirm){
     oc.appendChild(c);
     if(rank<3){const ar=document.createElement('span');ar.className='arrow';ar.textContent='→';oc.appendChild(ar);}
   });
-  document.getElementById('clasicBox').innerHTML=
-    `<b>Barça–Madrid:</b> l'ordre sortejat és la prioritat de desempat quan cal decidir qui té preferència en partits d'igual valor. `+
-    `Regla de compensació: qui NO va al Clàssic (<b>${names[order[2]]}</b> i <b>${names[order[3]]}</b>, els últims de l'ordre) tenen preferència per triar Quarts o Semis de Champions.`;
+  updateClasicBox();
   document.getElementById('orderZone').classList.remove('hidden');
   ['lg0','lg1','lg2','lg3'].forEach((id,i)=>document.getElementById(id).textContent=names[i]);
   const assign = distribute();
-  render(assign);
+  render(assign, true);
   document.getElementById('balanceSection').scrollIntoView({behavior:'smooth',block:'nearest'});
   await saveDraw(assign);
 }
@@ -518,35 +728,60 @@ function deserializeBlocks(obj){
   return out;
 }
 
+// find who got Real Madrid in an assignment array
+function findRmWinners(assign){
+  const rm = assign.find(a=>{ const m=MATCHES[a.idx]; return m && m.comp==='Lliga' && m.part==='Real Madrid'; });
+  return rm ? new Set([rm.s1, rm.s2]) : null;
+}
+
 async function saveDraw(assign){
   if(!cloudReady){ setSyncStatus('sync-off','No guardat: falta configurar Supabase (veure comentari al capçal del fitxer)'); return; }
   setSyncStatus('sync-wait','Guardant al núvol…');
   const payload={
-    names, order, blocks: serializeBlocks(),
+    mode, names, order, blocks: serializeBlocks(),
     assign: assign.map(a=>({idx:a.idx,s1:a.s1,s2:a.s2})),
+    original: (originalAssign||assign).map(a=>({idx:a.idx,s1:a.s1,s2:a.s2})),
     savedAt: new Date().toISOString()
   };
-  const { error } = await sb.from('sorteig_resultat').upsert({ id:1, data: payload, creat_el: new Date().toISOString() });
+  const { error } = await sb.from('sorteig_resultat').upsert({ id:MODE_ROW[mode], data: payload, creat_el: new Date().toISOString() });
   if(error){ setSyncStatus('sync-off','Error guardant: '+error.message); return; }
-  hasSavedDraw = true;
+  hasSavedDraw[mode] = true;
+  if(mode==='regular') rmWinners = findRmWinners(originalAssign||assign); // Madrid from the ORIGINAL draw
   document.getElementById('drawBtn').textContent = 'Fer un sorteig NOU (sobreescriu l\'actual)';
-  setSyncStatus('sync-ok','Guardat al núvol — visible pels 4 des de qualsevol dispositiu');
+  setSyncStatus('sync-ok',`Guardat "${MODE_LABEL[mode]}" al núvol — visible pels 4 des de qualsevol dispositiu`);
+}
+
+// load only the Real Madrid winners from the saved regular draw (row 1)
+async function loadRmWinners(){
+  if(!cloudReady) return;
+  const { data } = await sb.from('sorteig_resultat').select('data').eq('id',1).maybeSingle();
+  if(data && data.data && data.data.assign){
+    rmWinners = findRmWinners(data.data.assign);
+  }
 }
 
 async function loadSavedDraw(){
   if(!cloudReady){ setSyncStatus('sync-off','Sense connexió al núvol (falten les claus de Supabase al fitxer)'); return; }
   setSyncStatus('sync-wait','Carregant sorteig guardat…');
-  const { data, error } = await sb.from('sorteig_resultat').select('data').eq('id',1).maybeSingle();
+  // always try to know the Madrid winners (for champions rule), from the regular row
+  await loadRmWinners();
+  const { data, error } = await sb.from('sorteig_resultat').select('data').eq('id',MODE_ROW[mode]).maybeSingle();
   if(error){ setSyncStatus('sync-off','Error carregant: '+error.message); return; }
   if(!data || !data.data || !data.data.assign || !data.data.assign.length){
-    setSyncStatus('sync-ok','Connectat al núvol — encara no hi ha cap sorteig fet');
+    setSyncStatus('sync-ok',`Connectat al núvol — encara no hi ha cap sorteig de "${MODE_LABEL[mode]}"`);
+    document.getElementById('orderZone').classList.add('hidden');
+    document.getElementById('tableSection').classList.add('hidden');
+    document.getElementById('balanceSection').classList.add('hidden');
+    document.getElementById('drawBtn').textContent = 'Sortejar ordre i repartir';
+    hasSavedDraw[mode]=false;
+    setBlockPanel(true); // no draw yet → show restrictions so they can be set
     return;
   }
   const payload=data.data;
   names=payload.names; order=payload.order; blocks=deserializeBlocks(payload.blocks);
   [0,1,2,3].forEach(i=>{ document.getElementById('n'+i).value = names[i]; });
   syncBlockHeaders();
-  // restore checkboxes
+  renderBlockGrid();
   Object.keys(blocks).forEach(mi=>{
     blocks[mi].forEach(pe=>{
       const cb=document.querySelector(`#blockBody input[data-match="${mi}"][data-person="${pe}"]`);
@@ -554,6 +789,8 @@ async function loadSavedDraw(){
     });
   });
   const assign = payload.assign.map(a=>({...MATCHES[a.idx], idx:a.idx, s1:a.s1, s2:a.s2}));
+  // restore the immutable baseline (falls back to assign if an old record has none)
+  originalAssign = (payload.original || payload.assign).map(a=>({idx:a.idx, s1:a.s1, s2:a.s2}));
   const oc=document.getElementById('orderChips');
   oc.innerHTML='';
   order.forEach((pi,rank)=>{
@@ -563,23 +800,65 @@ async function loadSavedDraw(){
     oc.appendChild(c);
     if(rank<3){const ar=document.createElement('span');ar.className='arrow';ar.textContent='→';oc.appendChild(ar);}
   });
-  document.getElementById('clasicBox').innerHTML=
-    `<b>Barça–Madrid:</b> l'ordre sortejat és la prioritat de desempat quan cal decidir qui té preferència en partits d'igual valor. `+
-    `Regla de compensació: qui NO va al Clàssic (<b>${names[order[2]]}</b> i <b>${names[order[3]]}</b>, els últims de l'ordre) tenen preferència per triar Quarts o Semis de Champions.`;
+  updateClasicBox();
   document.getElementById('orderZone').classList.remove('hidden');
   ['lg0','lg1','lg2','lg3'].forEach((id,i)=>document.getElementById(id).textContent=names[i]);
-  render(assign);
-  hasSavedDraw = true;
+  render(assign, false);
+  hasSavedDraw[mode] = true;
   document.getElementById('drawBtn').textContent = 'Fer un sorteig NOU (sobreescriu l\'actual)';
   const when = new Date(payload.savedAt).toLocaleString('ca-ES');
-  setSyncStatus('sync-ok', `Sorteig carregat del núvol · fet el ${when}`);
+  setSyncStatus('sync-ok', `Sorteig de "${MODE_LABEL[mode]}" carregat · fet el ${when}`);
 }
 
-document.getElementById('drawBtn').addEventListener('click',()=>draw(true));
-document.getElementById('resetBtn').addEventListener('click',()=>{
+// Mode selector wiring
+document.querySelectorAll('#modeSelect .mode-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('#modeSelect .mode-btn').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    mode = btn.dataset.mode;
+    // reset checkboxes + views, rebuild grid/legend for the new mode
+    blocks={};
+    renderBlockGrid();
+    renderCatLegend();
+    loadSavedDraw();
+  });
+});
+
+document.getElementById('drawBtn').addEventListener('click',()=>draw(true));document.getElementById('resetBtn').addEventListener('click',()=>{
   document.getElementById('orderZone').classList.add('hidden');
   document.getElementById('tableSection').classList.add('hidden');
   document.getElementById('balanceSection').classList.add('hidden');
+});
+
+document.getElementById('wipeBtn').addEventListener('click',async ()=>{
+  if(!cloudReady){ alert('No hi ha connexió al núvol.'); return; }
+  const ok = confirm(`Vols ESBORRAR del núvol el sorteig de "${MODE_LABEL[mode]}"?\n\nAixò l'elimina per als 4 i no es pot desfer. Els altres modes no es toquen.`);
+  if(!ok) return;
+  setSyncStatus('sync-wait','Esborrant del núvol…');
+  const { error } = await sb.from('sorteig_resultat').upsert({ id:MODE_ROW[mode], data:{}, creat_el:new Date().toISOString() });
+  if(error){ setSyncStatus('sync-off','Error esborrant: '+error.message); return; }
+  // reset local state for this mode
+  originalAssign=null; currentAssign=null; hasSavedDraw[mode]=false;
+  if(mode==='regular') rmWinners=null;
+  document.getElementById('orderZone').classList.add('hidden');
+  document.getElementById('tableSection').classList.add('hidden');
+  document.getElementById('balanceSection').classList.add('hidden');
+  document.getElementById('drawBtn').textContent='Sortejar ordre i repartir';
+  setBlockPanel(true);
+  setSyncStatus('sync-ok',`Sorteig de "${MODE_LABEL[mode]}" esborrat. Pots sortejar de nou quan vulguis.`);
+});
+
+// Collapse / expand the restrictions panel (purely visual, nothing saved)
+function setBlockPanel(open){
+  const panel=document.getElementById('blockPanel');
+  const btn=document.getElementById('blockToggle');
+  panel.style.display = open ? '' : 'none';
+  btn.textContent = open ? 'Amaga ▲' : 'Mostra ▼';
+  btn.setAttribute('aria-expanded', open?'true':'false');
+}
+document.getElementById('blockToggle').addEventListener('click',()=>{
+  const open = document.getElementById('blockToggle').getAttribute('aria-expanded')==='true';
+  setBlockPanel(!open);
 });
 
 loadSavedDraw();
