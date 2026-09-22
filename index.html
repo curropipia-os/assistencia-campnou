@@ -132,6 +132,8 @@
   .mode-btn.on{border-color:var(--grana);background:#fdf0f3;box-shadow:0 0 0 1px var(--grana) inset}
   .seat-select{padding:5px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-weight:700;background:#fff;cursor:pointer;font-family:inherit;max-width:110px}
   .seat-select:focus{outline:2px solid var(--sea-bright);outline-offset:-1px}
+  .collapse-btn{font-size:11px;font-weight:700;color:var(--ink-soft);border:1px solid var(--line);border-radius:99px;padding:4px 11px;background:#fff;letter-spacing:.02em}
+  .collapse-btn:hover{border-color:var(--sea-bright);color:var(--ink)}
   .cat-legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
   .cat-count{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:8px;font-size:12.5px;font-weight:600;border:1px solid var(--line)}
   .cat-count b{font-variant-numeric:tabular-nums;font-size:14px}
@@ -219,22 +221,27 @@
   </section>
 
   <section class="card" style="margin-top:18px">
-    <div class="step-label"><span class="step-num">✗</span> Restriccions de disponibilitat (opcional)</div>
-    <p class="hint" style="margin-top:0">Marca qui <b>NO</b> pot anar a cada partit. El sorteig no li assignarà aquell partit. Deixa-ho en blanc si tothom pot anar-hi.</p>
-    <div style="overflow-x:auto;margin-top:12px">
-      <table id="blockTable">
-        <thead>
-          <tr>
-            <th>J</th>
-            <th>Partit</th>
-            <th id="bh0" style="text-align:center">P1</th>
-            <th id="bh1" style="text-align:center">P2</th>
-            <th id="bh2" style="text-align:center">P3</th>
-            <th id="bh3" style="text-align:center">P4</th>
-          </tr>
-        </thead>
-        <tbody id="blockBody"></tbody>
-      </table>
+    <div class="step-label" style="justify-content:space-between;display:flex;align-items:center">
+      <span><span class="step-num">✗</span> Restriccions de disponibilitat (opcional)</span>
+      <button id="blockToggle" class="collapse-btn" aria-expanded="true">Amaga ▲</button>
+    </div>
+    <div id="blockPanel">
+      <p class="hint" style="margin-top:0">Marca qui <b>NO</b> pot anar a cada partit. El sorteig no li assignarà aquell partit. Deixa-ho en blanc si tothom pot anar-hi.</p>
+      <div style="overflow-x:auto;margin-top:12px">
+        <table id="blockTable">
+          <thead>
+            <tr>
+              <th>J</th>
+              <th>Partit</th>
+              <th id="bh0" style="text-align:center">P1</th>
+              <th id="bh1" style="text-align:center">P2</th>
+              <th id="bh2" style="text-align:center">P3</th>
+              <th id="bh3" style="text-align:center">P4</th>
+            </tr>
+          </thead>
+          <tbody id="blockBody"></tbody>
+        </table>
+      </div>
     </div>
   </section>
 
@@ -528,17 +535,26 @@ function render(assign, isFreshDraw){
   renderBalance();
   document.getElementById('tableSection').classList.remove('hidden');
   document.getElementById('balanceSection').classList.remove('hidden');
+  // a draw exists → collapse the restrictions panel to reduce clutter
+  setBlockPanel(false);
 }
 
-// dropdown for a seat, marking manual changes
-function seatSelect(matchIdx, seatNum, current){
+// dropdown for a seat, marking manual changes. `orig` = original occupant of this seat (or undefined)
+function seatSelect(matchIdx, seatNum, current, orig){
   let opts=`<option value="-1" ${current<0?'selected':''}>— Ningú —</option>`;
   for(let p=0;p<4;p++){
     opts+=`<option value="${p}" ${p===current?'selected':''}>${names[p]}</option>`;
   }
   const border = current<0 ? 'var(--muted)' : COLORS[current];
-  return `<select class="seat-select" data-match="${matchIdx}" data-seat="${seatNum}"
+  const sel = `<select class="seat-select" data-match="${matchIdx}" data-seat="${seatNum}"
             style="border-left:4px solid ${border}">${opts}</select>`;
+  // note the original attendee when this seat has changed
+  let note='';
+  if(orig!==undefined && orig!==current){
+    const origName = orig<0 ? 'Ningú' : names[orig];
+    note = `<div style="font-size:10.5px;color:var(--muted);margin-top:3px">abans: <b style="color:${orig<0?'var(--muted)':COLORS[orig]}">${origName}</b></div>`;
+  }
+  return sel + note;
 }
 
 function renderTable(){
@@ -562,8 +578,8 @@ function renderTable(){
       <td><b>${m.part}</b>${m.data!=='—'?`<br><span style="font-size:11px;color:var(--muted)">${m.data}</span>`:''}${changed?'<br><span style="font-size:10px;color:var(--sand);font-weight:700">✎ CANVIAT</span>':''}${unassigned?'<br><span style="font-size:10px;color:var(--muted);font-weight:700">⚠ SENSE COBRIR</span>':''}</td>
       <td class="hide-m"><span class="cat-pill ${catClass(m.cat)}">${m.cat}</span></td>
       <td class="preu">${m.preu.toFixed(2)} €</td>
-      <td>${seatSelect(i,1,a.s1)}</td>
-      <td>${seatSelect(i,2,a.s2)}</td>`;
+      <td>${seatSelect(i,1,a.s1, changed&&orig?orig.s1:undefined)}</td>
+      <td>${seatSelect(i,2,a.s2, changed&&orig?orig.s2:undefined)}</td>`;
     body.appendChild(tr);
   });
   // wire up the selects
@@ -758,6 +774,7 @@ async function loadSavedDraw(){
     document.getElementById('balanceSection').classList.add('hidden');
     document.getElementById('drawBtn').textContent = 'Sortejar ordre i repartir';
     hasSavedDraw[mode]=false;
+    setBlockPanel(true); // no draw yet → show restrictions so they can be set
     return;
   }
   const payload=data.data;
@@ -807,8 +824,7 @@ document.querySelectorAll('#modeSelect .mode-btn').forEach(btn=>{
   });
 });
 
-document.getElementById('drawBtn').addEventListener('click',()=>draw(true));
-document.getElementById('resetBtn').addEventListener('click',()=>{
+document.getElementById('drawBtn').addEventListener('click',()=>draw(true));document.getElementById('resetBtn').addEventListener('click',()=>{
   document.getElementById('orderZone').classList.add('hidden');
   document.getElementById('tableSection').classList.add('hidden');
   document.getElementById('balanceSection').classList.add('hidden');
@@ -828,7 +844,21 @@ document.getElementById('wipeBtn').addEventListener('click',async ()=>{
   document.getElementById('tableSection').classList.add('hidden');
   document.getElementById('balanceSection').classList.add('hidden');
   document.getElementById('drawBtn').textContent='Sortejar ordre i repartir';
+  setBlockPanel(true);
   setSyncStatus('sync-ok',`Sorteig de "${MODE_LABEL[mode]}" esborrat. Pots sortejar de nou quan vulguis.`);
+});
+
+// Collapse / expand the restrictions panel (purely visual, nothing saved)
+function setBlockPanel(open){
+  const panel=document.getElementById('blockPanel');
+  const btn=document.getElementById('blockToggle');
+  panel.style.display = open ? '' : 'none';
+  btn.textContent = open ? 'Amaga ▲' : 'Mostra ▼';
+  btn.setAttribute('aria-expanded', open?'true':'false');
+}
+document.getElementById('blockToggle').addEventListener('click',()=>{
+  const open = document.getElementById('blockToggle').getAttribute('aria-expanded')==='true';
+  setBlockPanel(!open);
 });
 
 loadSavedDraw();
@@ -866,4 +896,4 @@ document.getElementById('testBtn').addEventListener('click',()=>{
 });
 </script>
 </body>
-</html> 
+</html>
