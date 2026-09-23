@@ -338,10 +338,10 @@ const MATCHES = [
   {comp:"Lliga",jor:"J32",data:"18/04/27",part:"Espanyol",cat:"Taronja (Mitjà)",preu:95.33},
   {comp:"Lliga",jor:"J34",data:"02/05/27",part:"Osasuna",cat:"Groc (Baix)",preu:13.62},
   {comp:"Lliga",jor:"J37",data:"23/05/27",part:"Málaga",cat:"Groc (Baix)",preu:13.62},
-  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 1 (top)",cat:"Champions",preu:81.71},
-  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 2",cat:"Champions",preu:54.47},
-  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 3",cat:"Champions",preu:40.85},
-  {comp:"Champions",jor:"—",data:"—",part:"Lligueta - Equip 4",cat:"Champions",preu:27.24},
+  {comp:"Champions",fase:"lliga",jor:"UCL",data:"08/12/26 · 21.00",part:"Manchester City",cat:"Champions",preu:81.71},
+  {comp:"Champions",fase:"lliga",jor:"UCL",data:"03/11/26 · 21.00",part:"Aston Villa",cat:"Champions",preu:54.47},
+  {comp:"Champions",fase:"lliga",jor:"UCL",data:"09/09/26 · 18.45",part:"Feyenoord",cat:"Champions",preu:40.85},
+  {comp:"Champions",fase:"lliga",jor:"UCL",data:"27/01/27 · 21.00",part:"Como 1907",cat:"Champions",preu:27.24},
   {comp:"Champions",jor:"—",data:"—",part:"Vuitens",cat:"Champions",preu:68.09},
   {comp:"Champions",jor:"—",data:"—",part:"Quarts",cat:"Champions",preu:95.33},
   {comp:"Champions",jor:"—",data:"—",part:"Semis",cat:"Champions",preu:122.56},
@@ -366,8 +366,8 @@ let rmWinners = null;
 function matchesForMode(mo){
   const list = MATCHES.map((m,i)=>({...m,idx:i}));
   if(mo==='regular'){
-    // Lliga + Champions league phase (Lligueta), NOT the knockouts
-    return list.filter(m=> m.comp==='Lliga' || (m.comp==='Champions' && m.part.startsWith('Lligueta')));
+    // Lliga + Champions league phase, NOT the knockouts
+    return list.filter(m=> m.comp==='Lliga' || (m.comp==='Champions' && m.fase==='lliga'));
   }
   if(mo==='champions'){
     return list.filter(m=> m.comp==='Champions' && (m.part==='Vuitens' || m.part==='Quarts' || m.part==='Semis'));
