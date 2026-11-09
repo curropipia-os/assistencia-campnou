@@ -330,7 +330,7 @@ const MATCHES = [
   {comp:"Lliga",jor:"J17",data:"20/12/26",part:"Reial Societat",cat:"Blau (Mitjà)",preu:40.85},
   {comp:"Lliga",jor:"J20",data:"17/01/27",part:"Elx",cat:"Groc (Baix)",preu:13.62},
   {comp:"Lliga",jor:"J22",data:"31/01/27",part:"València",cat:"Blau (Mitjà)",preu:54.47},
-  {comp:"Lliga",jor:"J23",data:"07/02/27",part:"Atlético Madrid",cat:"Vermell (Top)",preu:108.95},
+  {comp:"Lliga",jor:"J23",data:"02/12/26 · 21.30",part:"Atlético Madrid",cat:"Vermell (Top)",preu:108.95},
   {comp:"Lliga",jor:"J25",data:"21/02/27",part:"Llevant",cat:"Groc (Baix)",preu:13.62},
   {comp:"Lliga",jor:"J27",data:"07/03/27",part:"Betis",cat:"Taronja (Mitjà)",preu:68.09},
   {comp:"Lliga",jor:"J28",data:"14/03/27",part:"Deportivo",cat:"Groc (Baix)",preu:13.62},
@@ -348,6 +348,16 @@ const MATCHES = [
   {comp:"Copa",jor:"—",data:"—",part:"Quarts",cat:"Copa",preu:27.24},
   {comp:"Copa",jor:"—",data:"—",part:"Semis",cat:"Copa",preu:68.09},
 ];
+// Display order: chronological. MATCHES itself must NOT be reordered — saved
+// draws in the cloud reference each match by its position (idx) in MATCHES.
+function dateKey(m){
+  const r=/(\d{2})\/(\d{2})\/(\d{2})/.exec(m.data||'');
+  if(!r) return Infinity; // knockouts without a date go last
+  const t=/(\d{1,2})[.:](\d{2})/.exec((m.data.split('·')[1])||'');
+  return Date.UTC(2000+ +r[3], +r[2]-1, +r[1], t?+t[1]:12, t?+t[2]:0);
+}
+const DISPLAY_ORDER = MATCHES.map((m,i)=>i)
+  .sort((a,b)=> (dateKey(MATCHES[a])-dateKey(MATCHES[b])) || (a-b));
 const SOCI = 125;
 const COLORS = ['var(--p1)','var(--p2)','var(--p3)','var(--p4)'];
 let names = [];
@@ -408,7 +418,8 @@ function renderBlockGrid(){
   const body=document.getElementById('blockBody');
   body.innerHTML='';
   const poolIdx=new Set(matchesForMode(mode).map(m=>m.idx));
-  MATCHES.forEach((m,i)=>{
+  DISPLAY_ORDER.forEach(i=>{
+    const m=MATCHES[i];
     if(!poolIdx.has(i)) return; // only matches in the current mode
     const tr=document.createElement('tr');
     let checks='';
@@ -562,7 +573,8 @@ function renderTable(){
   body.innerHTML='';
   const byIdx={}; currentAssign.forEach(a=>byIdx[a.idx]=a);
   const origByIdx={}; (originalAssign||[]).forEach(a=>origByIdx[a.idx]=a);
-  MATCHES.forEach((m,i)=>{
+  DISPLAY_ORDER.forEach(i=>{
+    const m=MATCHES[i];
     const a=byIdx[i];
     if(!a) return;
     const orig=origByIdx[i];
