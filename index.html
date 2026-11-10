@@ -153,6 +153,16 @@
   .cb-groc{background:#f4f1d8}.cb-groc .big,.cb-groc .lbl{color:#6d6410}
   .cb-champions{background:#e6e0f5}.cb-champions .big,.cb-champions .lbl{color:#4a2e86}
   .cb-copa{background:#e4e6e8}.cb-copa .big,.cb-copa .lbl{color:#43474d}
+  .sold-row{display:flex;align-items:center;gap:6px;margin-top:5px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+  .sold-lbl{display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-weight:600}
+  .sold-lbl input{accent-color:#1a7a4c;width:14px;height:14px;cursor:pointer}
+  .sold-price{width:62px;padding:3px 6px;border:1px solid #52a878;border-radius:6px;font-family:inherit;font-size:12px;font-weight:700;color:#1a7a4c;text-align:right}
+  .sold-price:focus{outline:2px solid #52a878;outline-offset:-1px}
+  .sold-on{color:#1a7a4c}
+  .rules{border-left:5px solid var(--grana)}
+  .rules h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin-bottom:10px}
+  .rules ol{padding-left:22px;font-size:14px;display:grid;gap:7px}
+  .rules li::marker{color:var(--grana);font-weight:800}
   .hint{font-size:12.5px;color:var(--muted);margin-top:8px}
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--muted)}
   .legend span{display:flex;align-items:center;gap:5px}
@@ -180,6 +190,16 @@
     <div class="step-label">Partits de casa per categoria · temporada 2026-27</div>
     <div id="catSummary" class="cat-summary"></div>
     <p class="hint" style="margin-top:12px">Aquest és el repartiment que cal equilibrar: idealment cada persona acaba amb un mix semblant de cada color, no només el mateix nombre de partits.</p>
+  </section>
+
+  <section class="card rules">
+    <h2>Quan algú no pot anar a un partit</h2>
+    <ol>
+      <li>Ho diu al grup <b>com a mínim 7 dies abans</b> (o tan aviat com ho sàpiga).</li>
+      <li>Els altres tres tenen <b>prioritat</b> per quedar-se el seient. Si algú el vol, es fa el canvi a l'eina i el seient passa a comptar-li a ell.</li>
+      <li>Si ningú el vol, qui no pot anar en fa el que vulgui: el ven, el regala o el deixa buit. Si el ven, els diners són seus.</li>
+      <li>Si avisa tard i no hi ha temps de fer el pas 2, pot vendre'l igualment, però que no esdevingui costum.</li>
+    </ol>
   </section>
 
   <section class="card">
@@ -253,7 +273,7 @@
 
   <section id="tableSection" class="card hidden">
     <div class="step-label"><span class="step-num">3</span> Repartiment partit a partit</div>
-    <p class="hint" style="margin-top:0">Pots canviar qui va a cada partit amb els desplegables (per exemple si algú no pot anar-hi un cap de setmana). El saldo de sota s'actualitza sol i es desa al núvol. Els partits modificats es marquen en groc.</p>
+    <p class="hint" style="margin-top:0">Pots canviar qui va a cada partit amb els desplegables (per exemple si algú no pot anar-hi un cap de setmana). El saldo de sota s'actualitza sol i es desa al núvol. Els partits modificats es marquen en groc.<br>Si una entrada s'ha venut, marca <b>Venut</b> i escriu-hi el preu de venda. Els diners són de qui tenia el seient; si el seient era de «Ningú», es reparteixen entre els 4.</p>
     <div class="legend">
       <span><span class="dot" style="background:var(--p1)"></span><b id="lg0">P1</b></span>
       <span><span class="dot" style="background:var(--p2)"></span><b id="lg1">P2</b></span>
@@ -551,7 +571,7 @@ function render(assign, isFreshDraw){
 }
 
 // dropdown for a seat, marking manual changes. `orig` = original occupant of this seat (or undefined)
-function seatSelect(matchIdx, seatNum, current, orig){
+function seatSelect(matchIdx, seatNum, current, orig, sold){
   let opts=`<option value="-1" ${current<0?'selected':''}>— Ningú —</option>`;
   for(let p=0;p<4;p++){
     opts+=`<option value="${p}" ${p===current?'selected':''}>${names[p]}</option>`;
@@ -565,7 +585,12 @@ function seatSelect(matchIdx, seatNum, current, orig){
     const origName = orig<0 ? 'Ningú' : names[orig];
     note = `<div style="font-size:10.5px;color:var(--muted);margin-top:3px">abans: <b style="color:${orig<0?'var(--muted)':COLORS[orig]}">${origName}</b></div>`;
   }
-  return sel + note;
+  const isSold = typeof sold==='number';
+  const soldHtml = `<div class="sold-row ${isSold?'sold-on':''}">
+      <label class="sold-lbl"><input type="checkbox" class="sold-cb" data-match="${matchIdx}" data-seat="${seatNum}" ${isSold?'checked':''}>Venut</label>
+      ${isSold?`<input type="text" inputmode="decimal" class="sold-price" data-match="${matchIdx}" data-seat="${seatNum}" value="${sold>0?String(sold).replace('.',','):''}" placeholder="0,00"> €`:''}
+    </div>`;
+  return sel + soldHtml + note;
 }
 
 function renderTable(){
@@ -590,14 +615,46 @@ function renderTable(){
       <td><b>${m.part}</b>${m.data!=='—'?`<br><span style="font-size:11px;color:var(--muted)">${m.data}</span>`:''}${changed?'<br><span style="font-size:10px;color:var(--sand);font-weight:700">✎ CANVIAT</span>':''}${unassigned?'<br><span style="font-size:10px;color:var(--muted);font-weight:700">⚠ SENSE COBRIR</span>':''}</td>
       <td class="hide-m"><span class="cat-pill ${catClass(m.cat)}">${m.cat}</span></td>
       <td class="preu">${m.preu.toFixed(2)} €</td>
-      <td>${seatSelect(i,1,a.s1, changed&&orig?orig.s1:undefined)}</td>
-      <td>${seatSelect(i,2,a.s2, changed&&orig?orig.s2:undefined)}</td>`;
+      <td>${seatSelect(i,1,a.s1, changed&&orig?orig.s1:undefined, a.v1)}</td>
+      <td>${seatSelect(i,2,a.s2, changed&&orig?orig.s2:undefined, a.v2)}</td>`;
     body.appendChild(tr);
   });
   // wire up the selects
   body.querySelectorAll('.seat-select').forEach(sel=>{
     sel.addEventListener('change',()=>onSeatChange(sel));
   });
+  body.querySelectorAll('.sold-cb').forEach(cb=>{
+    cb.addEventListener('change',()=>onSoldToggle(cb));
+  });
+  body.querySelectorAll('.sold-price').forEach(inp=>{
+    inp.addEventListener('change',()=>onSoldPrice(inp));
+  });
+}
+
+// "Venut" checkbox: marks a seat as sold (price filled in afterwards)
+function onSoldToggle(cb){
+  const mi=+cb.dataset.match, seat=+cb.dataset.seat;
+  const a=currentAssign.find(x=>x.idx===mi);
+  if(!a) return;
+  a['v'+seat] = cb.checked ? 0 : null;
+  renderTable();
+  renderBalance();
+  saveDraw(currentAssign);
+  if(cb.checked){
+    const inp=document.querySelector(`#matchBody .sold-price[data-match="${mi}"][data-seat="${seat}"]`);
+    if(inp) inp.focus();
+  }
+}
+// sale price typed in (accepts "60", "60,5" or "60.50")
+function onSoldPrice(inp){
+  const mi=+inp.dataset.match, seat=+inp.dataset.seat;
+  const a=currentAssign.find(x=>x.idx===mi);
+  if(!a) return;
+  const v=parseFloat(String(inp.value).replace(',','.'));
+  a['v'+seat] = (isNaN(v)||v<0) ? 0 : Math.round(v*100)/100;
+  inp.value = a['v'+seat]>0 ? String(a['v'+seat]).replace('.',',') : '';
+  renderBalance();
+  saveDraw(currentAssign);
 }
 
 function onSeatChange(sel){
@@ -632,6 +689,16 @@ function renderBalance(){
     if(a.s1>=0) origVal[a.s1]+=m.preu/2;
     if(a.s2>=0) origVal[a.s2]+=m.preu/2;
   });
+  // sales: money goes to whoever held the seat; a "Ningú" seat's sale is split among the 4
+  const sales=[0,0,0,0], salesN=[0,0,0,0];
+  currentAssign.forEach(a=>{
+    [[a.s1,a.v1],[a.s2,a.v2]].forEach(([p,v])=>{
+      if(typeof v!=='number' || v<=0) return;
+      if(p>=0){ sales[p]+=v; salesN[p]++; }
+      else { for(let q=0;q<4;q++) sales[q]+=v/4; }
+    });
+  });
+  const anySales = sales.some(x=>x>0.004);
   const anyChange = originalAssign && JSON.stringify(originalAssign.map(a=>[a.idx,a.s1,a.s2]))
                     !== JSON.stringify(currentAssign.map(a=>[a.idx,a.s1,a.s2]));
 
@@ -660,6 +727,8 @@ function renderBalance(){
       <div class="bstat"><span>Valor partits</span><span class="v">${s.val.toFixed(2)} €</span></div>
       <div class="bstat"><span>Carnet soci</span><span class="v">${SOCI.toFixed(2)} €</span></div>
       <div class="bstat btotal"><span>TOTAL a pagar</span><span class="v">${total.toFixed(2)} €</span></div>
+      ${anySales?`<div class="bstat"><span>Vendes cobrades${salesN[i]?` <span style="font-weight:400;color:var(--muted);font-size:11px">(${salesN[i]} ${salesN[i]===1?'entrada':'entrades'})</span>`:''}</span><span class="v" style="color:#1a7a4c">${sales[i]>0.004?'−'+sales[i].toFixed(2):'0.00'} €</span></div>
+      <div class="bstat"><span><b>Cost net</b></span><span class="v">${(total-sales[i]).toFixed(2)} €</span></div>`:''}
       ${debtHtml}`;
     cards.appendChild(d);
   });
@@ -751,7 +820,12 @@ async function saveDraw(assign){
   setSyncStatus('sync-wait','Guardant al núvol…');
   const payload={
     mode, names, order, blocks: serializeBlocks(),
-    assign: assign.map(a=>({idx:a.idx,s1:a.s1,s2:a.s2})),
+    assign: assign.map(a=>{
+      const o={idx:a.idx,s1:a.s1,s2:a.s2};
+      if(typeof a.v1==='number') o.v1=a.v1;
+      if(typeof a.v2==='number') o.v2=a.v2;
+      return o;
+    }),
     original: (originalAssign||assign).map(a=>({idx:a.idx,s1:a.s1,s2:a.s2})),
     savedAt: new Date().toISOString()
   };
@@ -800,7 +874,8 @@ async function loadSavedDraw(){
       if(cb) cb.checked=true;
     });
   });
-  const assign = payload.assign.map(a=>({...MATCHES[a.idx], idx:a.idx, s1:a.s1, s2:a.s2}));
+  const assign = payload.assign.map(a=>({...MATCHES[a.idx], idx:a.idx, s1:a.s1, s2:a.s2,
+    v1: typeof a.v1==='number'?a.v1:null, v2: typeof a.v2==='number'?a.v2:null}));
   // restore the immutable baseline (falls back to assign if an old record has none)
   originalAssign = (payload.original || payload.assign).map(a=>({idx:a.idx, s1:a.s1, s2:a.s2}));
   const oc=document.getElementById('orderChips');
