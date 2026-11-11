@@ -197,7 +197,7 @@
     <ol>
       <li>Ho diu al grup <b>com a mínim 7 dies abans</b> (o tan aviat com ho sàpiga).</li>
       <li>Els altres tres tenen <b>prioritat</b> per quedar-se el seient. Si algú el vol, es fa el canvi a l'eina i el seient passa a comptar-li a ell.</li>
-      <li>Si ningú el vol, qui no pot anar en fa el que vulgui: el ven, el regala o el deixa buit. Si el ven, els diners són seus.</li>
+      <li>Si ningú el vol, qui no pot anar en fa el que vulgui: el ven, el regala o el deixa buit. Si el ven, <b>recupera el que li costa el seient</b> i la resta es reparteix a parts iguals entre els 4 (ell inclòs).</li>
       <li>Si avisa tard i no hi ha temps de fer el pas 2, pot vendre'l igualment, però que no esdevingui costum.</li>
     </ol>
   </section>
@@ -273,7 +273,7 @@
 
   <section id="tableSection" class="card hidden">
     <div class="step-label"><span class="step-num">3</span> Repartiment partit a partit</div>
-    <p class="hint" style="margin-top:0">Pots canviar qui va a cada partit amb els desplegables (per exemple si algú no pot anar-hi un cap de setmana). El saldo de sota s'actualitza sol i es desa al núvol. Els partits modificats es marquen en groc.<br>Si una entrada s'ha venut, marca <b>Venut</b> i escriu-hi el preu de venda. Els diners són de qui tenia el seient; si el seient era de «Ningú», es reparteixen entre els 4.</p>
+    <p class="hint" style="margin-top:0">Pots canviar qui va a cada partit amb els desplegables (per exemple si algú no pot anar-hi un cap de setmana). El saldo de sota s'actualitza sol i es desa al núvol. Els partits modificats es marquen en groc.<br>Si una entrada s'ha venut, marca <b>Venut</b> i escriu-hi el preu de venda. Qui tenia el seient recupera el que li costa i l'excedent es reparteix a parts iguals entre els 4; si el seient era de «Ningú», tot l'import es reparteix entre els 4.</p>
     <div class="legend">
       <span><span class="dot" style="background:var(--p1)"></span><b id="lg0">P1</b></span>
       <span><span class="dot" style="background:var(--p2)"></span><b id="lg1">P2</b></span>
@@ -368,6 +368,22 @@ const MATCHES = [
   {comp:"Copa",jor:"—",data:"—",part:"Quarts",cat:"Copa",preu:27.24},
   {comp:"Copa",jor:"—",data:"—",part:"Semis",cat:"Copa",preu:68.09},
 ];
+// Sale of a seat: the holder recovers the seat's internal cost (half the match price);
+// any surplus is split equally among the 4 (holder included). A "Ningú" seat's sale
+// goes entirely to the 4. Returns the amount each person receives.
+function saleSplit(holder, price, saleValue){
+  const out=[0,0,0,0];
+  if(!(saleValue>0)) return out;
+  if(holder<0){ for(let q=0;q<4;q++) out[q]+=saleValue/4; return out; }
+  const cost=price/2;
+  const rec=Math.min(saleValue,cost);
+  const surplus=Math.max(0,saleValue-cost);
+  out[holder]+=rec;
+  for(let q=0;q<4;q++) out[q]+=surplus/4;
+  return out;
+}
+const eur=v=>v.toFixed(2).replace('.',',')+' €';
+
 // Display order: chronological. MATCHES itself must NOT be reordered — saved
 // draws in the cloud reference each match by its position (idx) in MATCHES.
 function dateKey(m){
@@ -571,6 +587,20 @@ function render(assign, isFreshDraw){
 }
 
 // dropdown for a seat, marking manual changes. `orig` = original occupant of this seat (or undefined)
+function soldNote(matchIdx, current, sold){
+  const st='font-size:10.5px;margin-top:2px;line-height:1.35';
+  if(current<0){
+    return `<div style="${st};color:var(--grana)">→ ${sold>0?eur(sold)+' ':''}repartits entre els 4${sold>0?' ('+eur(sold/4)+' c/u)':''}<br><span style="color:var(--muted)">Si l'ha venut algú, tria'l al desplegable</span></div>`;
+  }
+  if(!(sold>0)) return `<div style="${st};color:var(--muted)">Escriu el preu de venda</div>`;
+  const cost=MATCHES[matchIdx].preu/2;
+  if(sold<=cost){
+    return `<div style="${st};color:#1a7a4c">→ tot per a <b>${names[current]}</b> (no hi ha excedent)</div>`;
+  }
+  const surplus=sold-cost;
+  return `<div style="${st};color:#1a7a4c">→ <b>${names[current]}</b> recupera ${eur(cost)}<br>→ excedent ${eur(surplus)}: ${eur(surplus/4)} per a cadascun dels 4</div>`;
+}
+
 function seatSelect(matchIdx, seatNum, current, orig, sold){
   let opts=`<option value="-1" ${current<0?'selected':''}>— Ningú —</option>`;
   for(let p=0;p<4;p++){
@@ -589,7 +619,8 @@ function seatSelect(matchIdx, seatNum, current, orig, sold){
   const soldHtml = `<div class="sold-row ${isSold?'sold-on':''}">
       <label class="sold-lbl"><input type="checkbox" class="sold-cb" data-match="${matchIdx}" data-seat="${seatNum}" ${isSold?'checked':''}>Venut</label>
       ${isSold?`<input type="text" inputmode="decimal" class="sold-price" data-match="${matchIdx}" data-seat="${seatNum}" value="${sold>0?String(sold).replace('.',','):''}" placeholder="0,00"> €`:''}
-    </div>`;
+    </div>
+    ${isSold?soldNote(matchIdx,current,sold):''}`;
   return sel + soldHtml + note;
 }
 
@@ -652,7 +683,7 @@ function onSoldPrice(inp){
   if(!a) return;
   const v=parseFloat(String(inp.value).replace(',','.'));
   a['v'+seat] = (isNaN(v)||v<0) ? 0 : Math.round(v*100)/100;
-  inp.value = a['v'+seat]>0 ? String(a['v'+seat]).replace('.',',') : '';
+  renderTable();
   renderBalance();
   saveDraw(currentAssign);
 }
@@ -690,12 +721,21 @@ function renderBalance(){
     if(a.s2>=0) origVal[a.s2]+=m.preu/2;
   });
   // sales: money goes to whoever held the seat; a "Ningú" seat's sale is split among the 4
-  const sales=[0,0,0,0], salesN=[0,0,0,0];
+  const sales=[0,0,0,0], salesN=[0,0,0,0], recov=[0,0,0,0], shared=[0,0,0,0];
   currentAssign.forEach(a=>{
+    const preu=MATCHES[a.idx].preu;
     [[a.s1,a.v1],[a.s2,a.v2]].forEach(([p,v])=>{
       if(typeof v!=='number' || v<=0) return;
-      if(p>=0){ sales[p]+=v; salesN[p]++; }
-      else { for(let q=0;q<4;q++) sales[q]+=v/4; }
+      const part=saleSplit(p, preu, v);
+      if(p>=0){
+        salesN[p]++;
+        const rec=Math.min(v,preu/2);
+        recov[p]+=rec;
+        for(let q=0;q<4;q++) shared[q]+= part[q] - (q===p?rec:0);
+      } else {
+        for(let q=0;q<4;q++) shared[q]+=part[q];
+      }
+      for(let q=0;q<4;q++) sales[q]+=part[q];
     });
   });
   const anySales = sales.some(x=>x>0.004);
@@ -727,7 +767,8 @@ function renderBalance(){
       <div class="bstat"><span>Valor partits</span><span class="v">${s.val.toFixed(2)} €</span></div>
       <div class="bstat"><span>Carnet soci</span><span class="v">${SOCI.toFixed(2)} €</span></div>
       <div class="bstat btotal"><span>TOTAL a pagar</span><span class="v">${total.toFixed(2)} €</span></div>
-      ${anySales?`<div class="bstat"><span>Vendes cobrades${salesN[i]?` <span style="font-weight:400;color:var(--muted);font-size:11px">(${salesN[i]} ${salesN[i]===1?'entrada':'entrades'})</span>`:''}</span><span class="v" style="color:#1a7a4c">${sales[i]>0.004?'−'+sales[i].toFixed(2):'0.00'} €</span></div>
+      ${anySales?`${recov[i]>0.004?`<div class="bstat"><span>Recupera seients venuts <span style="font-weight:400;color:var(--muted);font-size:11px">(${salesN[i]})</span></span><span class="v" style="color:#1a7a4c">−${recov[i].toFixed(2)} €</span></div>`:''}
+      <div class="bstat"><span>Part comuna de vendes</span><span class="v" style="color:#1a7a4c">${shared[i]>0.004?'−'+shared[i].toFixed(2):'0.00'} €</span></div>
       <div class="bstat"><span><b>Cost net</b></span><span class="v">${(total-sales[i]).toFixed(2)} €</span></div>`:''}
       ${debtHtml}`;
     cards.appendChild(d);
