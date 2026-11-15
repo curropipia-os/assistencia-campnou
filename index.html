@@ -199,6 +199,7 @@
       <li>Els altres tres tenen <b>prioritat</b> per quedar-se el seient. Si algú el vol, es fa el canvi a l'eina i el seient passa a comptar-li a ell.</li>
       <li>Si ningú el vol, qui no pot anar en fa el que vulgui: el ven, el regala o el deixa buit. Si el ven, <b>recupera el que li costa el seient</b> i la resta es reparteix a parts iguals entre els 4 (ell inclòs).</li>
       <li>Si avisa tard i no hi ha temps de fer el pas 2, pot vendre'l igualment, però que no esdevingui costum.</li>
+      <li>Si a última hora no hi pot anar i no l'ha pogut cedir ni vendre, <b>no toqueu l'eina</b>: el seient li continua comptant. «Ningú» és només per a seients que no són de cap dels 4.</li>
     </ol>
   </section>
 
@@ -246,6 +247,7 @@
       <button id="blockToggle" class="collapse-btn" aria-expanded="true">Amaga ▲</button>
     </div>
     <div id="blockPanel">
+      <p id="blockLockNote" class="hint hidden" style="margin:0 0 10px;padding:10px 12px;background:#fdf3dd;border:1px solid var(--or);border-radius:8px;color:var(--ink)">🔒 Les restriccions només s'apliquen en fer el sorteig, i aquest ja està fet. Per canviar qui va a un partit, cediu el seient amb el desplegable de la taula de repartiment.</p>
       <p class="hint" style="margin-top:0">Marca qui <b>NO</b> pot anar a cada partit. El sorteig no li assignarà aquell partit. Deixa-ho en blanc si tothom pot anar-hi.</p>
       <div style="overflow-x:auto;margin-top:12px">
         <table id="blockTable">
@@ -582,8 +584,9 @@ function render(assign, isFreshDraw){
   renderBalance();
   document.getElementById('tableSection').classList.remove('hidden');
   document.getElementById('balanceSection').classList.remove('hidden');
-  // a draw exists → collapse the restrictions panel to reduce clutter
+  // a draw exists → collapse and lock the restrictions panel
   setBlockPanel(false);
+  lockBlocks(true);
 }
 
 // dropdown for a seat, marking manual changes. `orig` = original occupant of this seat (or undefined)
@@ -692,6 +695,13 @@ function onSeatChange(sel){
   const mi=+sel.dataset.match, seat=+sel.dataset.seat, val=+sel.value;
   const a=currentAssign.find(x=>x.idx===mi);
   if(!a) return;
+  const prev = seat===1 ? a.s1 : a.s2;
+  if(val===-1 && prev>=0){
+    const ok = confirm(`Vols deixar aquest seient a «Ningú»?\n\n`+
+      `Si ${names[prev]} simplement no hi ha pogut anar, NO ho facis: deixa-hi el seu nom. El seient li continua comptant, i si el ven, marca «Venut».\n\n`+
+      `«Ningú» vol dir que el seient no és de cap dels 4, i el seu cost (${(MATCHES[mi].preu/2).toFixed(2)} €) es repartirà entre tots quatre.`);
+    if(!ok){ renderTable(); return; }
+  }
   // the same person MAY take both seats (e.g. going with a child) —
   // in that case they absorb the full value of the match (two halves).
   if(seat===1) a.s1=val; else a.s2=val;
@@ -720,6 +730,13 @@ function renderBalance(){
     if(a.s1>=0) origVal[a.s1]+=m.preu/2;
     if(a.s2>=0) origVal[a.s2]+=m.preu/2;
   });
+  // seats left to "Ningú": their cost is shared equally by the 4 (so totals always add up)
+  const nobodyCost = arr => arr.reduce((t,a)=>{
+    const half=MATCHES[a.idx].preu/2;
+    return t + (a.s1<0?half:0) + (a.s2<0?half:0);
+  },0)/4;
+  const nobody = nobodyCost(currentAssign);
+  const origNobody = nobodyCost(originalAssign||[]);
   // sales: money goes to whoever held the seat; a "Ningú" seat's sale is split among the 4
   const sales=[0,0,0,0], salesN=[0,0,0,0], recov=[0,0,0,0], shared=[0,0,0,0];
   currentAssign.forEach(a=>{
@@ -745,10 +762,10 @@ function renderBalance(){
   const cards=document.getElementById('balanceCards');
   cards.innerHTML='';
   stat.forEach((s,i)=>{
-    const total=s.val+SOCI;
+    const total=s.val+nobody+SOCI;
     // debt: positive = has paid MORE than the draw assigned (others owe them);
     //       negative = has paid LESS (they owe others)
-    const debt = s.val - origVal[i];
+    const debt = (s.val+nobody) - (origVal[i]+origNobody);
     let debtHtml='';
     if(anyChange){
       const sign = debt>0.005 ? '+' : (debt<-0.005 ? '−' : '');
@@ -765,6 +782,7 @@ function renderBalance(){
       <div class="bname">${names[i]}</div>
       <div class="bstat"><span>Partits</span><span class="v">${partitsTxt}</span></div>
       <div class="bstat"><span>Valor partits</span><span class="v">${s.val.toFixed(2)} €</span></div>
+      ${nobody>0.004?`<div class="bstat"><span>Seients de «Ningú» <span style="font-weight:400;color:var(--muted);font-size:11px">(÷4)</span></span><span class="v">${nobody.toFixed(2)} €</span></div>`:''}
       <div class="bstat"><span>Carnet soci</span><span class="v">${SOCI.toFixed(2)} €</span></div>
       <div class="bstat btotal"><span>TOTAL a pagar</span><span class="v">${total.toFixed(2)} €</span></div>
       ${anySales?`${recov[i]>0.004?`<div class="bstat"><span>Recupera seients venuts <span style="font-weight:400;color:var(--muted);font-size:11px">(${salesN[i]})</span></span><span class="v" style="color:#1a7a4c">−${recov[i].toFixed(2)} €</span></div>`:''}
@@ -902,6 +920,7 @@ async function loadSavedDraw(){
     document.getElementById('drawBtn').textContent = 'Sortejar ordre i repartir';
     hasSavedDraw[mode]=false;
     setBlockPanel(true); // no draw yet → show restrictions so they can be set
+    lockBlocks(false);
     return;
   }
   const payload=data.data;
@@ -973,8 +992,16 @@ document.getElementById('wipeBtn').addEventListener('click',async ()=>{
   document.getElementById('balanceSection').classList.add('hidden');
   document.getElementById('drawBtn').textContent='Sortejar ordre i repartir';
   setBlockPanel(true);
+  lockBlocks(false);
   setSyncStatus('sync-ok',`Sorteig de "${MODE_LABEL[mode]}" esborrat. Pots sortejar de nou quan vulguis.`);
 });
+
+// Lock the restrictions once a draw exists: they only matter when drawing
+function lockBlocks(locked){
+  document.querySelectorAll('#blockBody input[type=checkbox]').forEach(cb=>{ cb.disabled=locked; });
+  const n=document.getElementById('blockLockNote');
+  if(n) n.classList.toggle('hidden', !locked);
+}
 
 // Collapse / expand the restrictions panel (purely visual, nothing saved)
 function setBlockPanel(open){
