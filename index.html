@@ -778,8 +778,7 @@ function renderBalance(){
     att.forEach(p=>chN[p]++);
   });
   const anyCh = currentAssign.some(a=>MATCHES[a.idx].comp==='Champions');
-  // empty seats are normally just J1 Athletic (played before the split)
-  const onlyJ1 = currentAssign.every(a=>(a.s1>=0 && a.s2>=0) || (MATCHES[a.idx].comp==='Lliga' && MATCHES[a.idx].jor==='J1'));
+  // "Part fixa" = what everyone pays equally: membership card + share of unassigned seats (J1 Athletic)
   const openDet = (()=>{ try{ return JSON.parse(localStorage.getItem('balDetOpen')||'[]'); }catch(e){ return []; } })();
   const cards=document.getElementById('balanceCards');
   cards.innerHTML='';
@@ -798,8 +797,7 @@ function renderBalance(){
       <details class="bdet" data-p="${i}" ${openDet.includes(i)?'open':''}>
         <summary>Veure detall</summary>
         ${row(`Seients (${s.seats})`, s.val)}
-        ${nobody>0.004?row(onlyJ1?'Athletic (J1) ÷4':'Seients buits ÷4', nobody, '+ '):''}
-        ${row('Carnet soci', SOCI, '+ ')}
+        ${row('Part fixa', SOCI+nobody, '+ ')}
         ${recov[i]>0.004?row(`Venudes (${salesN[i]})`, recov[i], '− '):''}
         ${shared[i]>0.004?row('Vendes comunes', shared[i], '− '):''}
         <div class="bstat btotal"><span>Pagues</span><span class="v">${eur(pay)}</span></div>
