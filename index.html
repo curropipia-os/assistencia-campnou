@@ -104,6 +104,19 @@
   .bstat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
   .bstat .v{font-weight:700;font-variant-numeric:tabular-nums}
   .btotal{border-top:1px solid var(--line);margin-top:6px;padding-top:6px;font-size:15px}
+  .bstat .v{white-space:nowrap}
+  .bpay-l{font-size:12px;color:var(--muted);margin-top:2px}
+  .bpay{font-size:26px;font-weight:800;letter-spacing:-.02em;white-space:nowrap;font-variant-numeric:tabular-nums;line-height:1.2}
+  .bsub{font-size:12.5px;color:var(--muted);margin:3px 0 10px}
+  .bdet summary{font-size:12.5px;font-weight:600;color:var(--blau);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:4px}
+  .bdet summary::-webkit-details-marker{display:none}
+  .bdet summary::after{content:'▾';font-size:11px;transition:transform .15s}
+  .bdet[open] summary::after{transform:rotate(180deg)}
+  .bdet[open] summary{margin-bottom:6px}
+  .bdet .bstat{font-size:12.5px;gap:8px}
+  .bdet .bstat span:first-child{color:var(--muted)}
+  #balanceCards{align-items:start}
+  .bdet .btotal span:first-child{color:var(--ink);font-weight:700}
   .devbar{margin-top:16px;padding:14px 16px;border-radius:10px;font-size:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
   .dev-good{background:#e5f4ec;border:1px solid #52a878}
   .dev-mid{background:#fdf3dd;border:1px solid var(--or)}
@@ -757,36 +770,45 @@ function renderBalance(){
   const anyChange = originalAssign && JSON.stringify(originalAssign.map(a=>[a.idx,a.s1,a.s2]))
                     !== JSON.stringify(currentAssign.map(a=>[a.idx,a.s1,a.s2]));
 
+  // champions attended per person (shown next to the match count)
+  const chN=[0,0,0,0];
+  currentAssign.forEach(a=>{
+    if(MATCHES[a.idx].comp!=='Champions') return;
+    const att=new Set([a.s1,a.s2].filter(x=>x>=0));
+    att.forEach(p=>chN[p]++);
+  });
+  const anyCh = currentAssign.some(a=>MATCHES[a.idx].comp==='Champions');
+  const openDet = (()=>{ try{ return JSON.parse(localStorage.getItem('balDetOpen')||'[]'); }catch(e){ return []; } })();
   const cards=document.getElementById('balanceCards');
   cards.innerHTML='';
   stat.forEach((s,i)=>{
-    const total=s.val+nobody+SOCI;
-    // debt: positive = has paid MORE than the draw assigned (others owe them);
-    //       negative = has paid LESS (they owe others)
-    const debt = (s.val+nobody) - (origVal[i]+origNobody);
-    let debtHtml='';
-    if(anyChange){
-      const sign = debt>0.005 ? '+' : (debt<-0.005 ? '−' : '');
-      const col = debt>0.005 ? '#1a7a4c' : (debt<-0.005 ? 'var(--grana)' : 'var(--muted)');
-      const txt = Math.abs(debt)<0.005 ? 'en paus' : sign+Math.abs(debt).toFixed(2)+' €';
-      debtHtml=`<div class="bstat" style="border-top:1px dashed var(--line);margin-top:4px;padding-top:4px">
-        <span>Saldo vs sorteig</span><span class="v" style="color:${col}">${txt}</span></div>`;
-    }
-    // show "matches (seats)" only when they differ, so a double-seat is visible
-    const partitsTxt = s.seats>s.matches ? `${s.matches} <span style="font-weight:400;color:var(--muted);font-size:11px">(${s.seats} seients)</span>` : `${s.matches}`;
+    const pay = s.val + nobody + SOCI - sales[i];
+    const nTxt = s.seats>s.matches ? `${s.matches} partits (${s.seats} seients)` : `${s.matches} ${s.matches===1?'partit':'partits'}`;
+    const chTxt = anyCh ? ` · ${chN[i]} Champions` : '';
+    const row=(label,val,sign='')=>`<div class="bstat"><span>${label}</span><span class="v">${sign}${eur(val)}</span></div>`;
     const d=document.createElement('div');
     d.className='bcard p'+i;
     d.innerHTML=`
       <div class="bname">${names[i]}</div>
-      <div class="bstat"><span>Partits</span><span class="v">${partitsTxt}</span></div>
-      <div class="bstat"><span>Valor partits</span><span class="v">${s.val.toFixed(2)} €</span></div>
-      ${nobody>0.004?`<div class="bstat"><span>Partits no repartits <span style="font-weight:400;color:var(--muted);font-size:11px">(÷4)</span></span><span class="v">${nobody.toFixed(2)} €</span></div>`:''}
-      <div class="bstat"><span>Carnet soci</span><span class="v">${SOCI.toFixed(2)} €</span></div>
-      <div class="bstat btotal"><span>TOTAL a pagar</span><span class="v">${total.toFixed(2)} €</span></div>
-      ${anySales?`${recov[i]>0.004?`<div class="bstat"><span>Recupera seients venuts <span style="font-weight:400;color:var(--muted);font-size:11px">(${salesN[i]})</span></span><span class="v" style="color:#1a7a4c">−${recov[i].toFixed(2)} €</span></div>`:''}
-      <div class="bstat"><span>Part comuna de vendes</span><span class="v" style="color:#1a7a4c">${shared[i]>0.004?'−'+shared[i].toFixed(2):'0.00'} €</span></div>
-      <div class="bstat"><span><b>Cost net</b></span><span class="v">${(total-sales[i]).toFixed(2)} €</span></div>`:''}
-      ${debtHtml}`;
+      <div class="bpay-l">Pagues</div>
+      <div class="bpay">${eur(pay)}</div>
+      <div class="bsub">${nTxt}${chTxt}</div>
+      <details class="bdet" data-p="${i}" ${openDet.includes(i)?'open':''}>
+        <summary>Veure detall</summary>
+        ${row(`Seients (${s.seats})`, s.val)}
+        ${nobody>0.004?row('No repartits (÷4)', nobody, '+ '):''}
+        ${row('Carnet soci', SOCI, '+ ')}
+        ${recov[i]>0.004?row(`Venudes (${salesN[i]})`, recov[i], '− '):''}
+        ${shared[i]>0.004?row('Vendes comunes', shared[i], '− '):''}
+        <div class="bstat btotal"><span>Pagues</span><span class="v">${eur(pay)}</span></div>
+      </details>`;
+    d.querySelector('details').addEventListener('toggle',e=>{
+      try{
+        const cur=new Set(JSON.parse(localStorage.getItem('balDetOpen')||'[]'));
+        e.target.open?cur.add(i):cur.delete(i);
+        localStorage.setItem('balDetOpen',JSON.stringify([...cur]));
+      }catch(err){}
+    });
     cards.appendChild(d);
   });
   const vals=stat.map(s=>s.val);
@@ -796,8 +818,7 @@ function renderBalance(){
   if(dev>30){cls='dev-bad';msg='Desequilibrat — ajusta o compensa amb un altre partit';}
   else if(dev>15){cls='dev-mid';msg='Acceptable — es pot afinar';}
   bar.className='devbar '+cls;
-  let debtNote = anyChange ? ' · saldo per canvis manuals actiu' : '';
-  bar.innerHTML=`<span>${msg}${debtNote}</span><span>Desviació màx.: <span class="dev-val">${dev.toFixed(2)} €</span></span>`;
+  bar.innerHTML=`<span>${msg}</span><span>Desviació màx.: <span class="dev-val">${eur(dev)}</span></span>`;
 }
 
 let hasSavedDraw = {regular:false, champions:false, copa:false};
