@@ -199,7 +199,7 @@
       <li>Els altres tres tenen <b>prioritat</b> per quedar-se el seient. Si algú el vol, es fa el canvi a l'eina i el seient passa a comptar-li a ell.</li>
       <li>Si ningú el vol, qui no pot anar en fa el que vulgui: el ven, el regala o el deixa buit. Si el ven, <b>recupera el que li costa el seient</b> i la resta es reparteix a parts iguals entre els 4 (ell inclòs).</li>
       <li>Si avisa tard i no hi ha temps de fer el pas 2, pot vendre'l igualment, però que no esdevingui costum.</li>
-      <li>Si a última hora no hi pot anar i no l'ha pogut cedir ni vendre, <b>no toqueu l'eina</b>: el seient li continua comptant. «Ningú» és només per a seients que no són de cap dels 4.</li>
+      <li>Si a última hora no hi pot anar i no l'ha pogut cedir ni vendre, <b>no toqueu l'eina</b>: el seient li continua comptant.</li>
     </ol>
   </section>
 
@@ -275,7 +275,7 @@
 
   <section id="tableSection" class="card hidden">
     <div class="step-label"><span class="step-num">3</span> Repartiment partit a partit</div>
-    <p class="hint" style="margin-top:0">Pots canviar qui va a cada partit amb els desplegables (per exemple si algú no pot anar-hi un cap de setmana). El saldo de sota s'actualitza sol i es desa al núvol. Els partits modificats es marquen en groc.<br>Si una entrada s'ha venut, marca <b>Venut</b> i escriu-hi el preu de venda. Qui tenia el seient recupera el que li costa i l'excedent es reparteix a parts iguals entre els 4; si el seient era de «Ningú», tot l'import es reparteix entre els 4.</p>
+    <p class="hint" style="margin-top:0">Pots canviar qui va a cada partit amb els desplegables (per exemple si algú no pot anar-hi un cap de setmana). El saldo de sota s'actualitza sol i es desa al núvol. Els partits modificats es marquen en groc.<br>Si una entrada s'ha venut, marca <b>Venut</b> i escriu-hi el preu de venda. Qui tenia el seient recupera el que li costa i l'excedent es reparteix a parts iguals entre els 4.</p>
     <div class="legend">
       <span><span class="dot" style="background:var(--p1)"></span><b id="lg0">P1</b></span>
       <span><span class="dot" style="background:var(--p2)"></span><b id="lg1">P2</b></span>
@@ -605,13 +605,18 @@ function soldNote(matchIdx, current, sold){
 }
 
 function seatSelect(matchIdx, seatNum, current, orig, sold){
-  let opts=`<option value="-1" ${current<0?'selected':''}>— Ningú —</option>`;
+  // "Ningú" is no longer offered: it only appears on a seat that already has it
+  // (e.g. J1 Athletic, played before the split), so it can be fixed but not chosen.
+  const m=MATCHES[matchIdx];
+  const fixedEmpty = m.comp==='Lliga' && m.jor==='J1';
+  let opts = current<0 ? `<option value="-1" selected>— Ningú —</option>` : '';
   for(let p=0;p<4;p++){
     opts+=`<option value="${p}" ${p===current?'selected':''}>${names[p]}</option>`;
   }
   const border = current<0 ? 'var(--muted)' : COLORS[current];
-  const sel = `<select class="seat-select" data-match="${matchIdx}" data-seat="${seatNum}"
-            style="border-left:4px solid ${border}">${opts}</select>`;
+  const sel = `<select class="seat-select" data-match="${matchIdx}" data-seat="${seatNum}" ${fixedEmpty?'disabled title="Partit jugat abans del repartiment"':''}
+            style="border-left:4px solid ${border}${fixedEmpty?';opacity:.55;cursor:not-allowed':''}">${opts}</select>`;
+  if(fixedEmpty) return sel + `<div style="font-size:10.5px;color:var(--muted);margin-top:3px">Jugat abans del repartiment</div>`;
   // note the original attendee when this seat has changed
   let note='';
   if(orig!==undefined && orig!==current){
@@ -695,13 +700,6 @@ function onSeatChange(sel){
   const mi=+sel.dataset.match, seat=+sel.dataset.seat, val=+sel.value;
   const a=currentAssign.find(x=>x.idx===mi);
   if(!a) return;
-  const prev = seat===1 ? a.s1 : a.s2;
-  if(val===-1 && prev>=0){
-    const ok = confirm(`Vols deixar aquest seient a «Ningú»?\n\n`+
-      `Si ${names[prev]} simplement no hi ha pogut anar, NO ho facis: deixa-hi el seu nom. El seient li continua comptant, i si el ven, marca «Venut».\n\n`+
-      `«Ningú» vol dir que el seient no és de cap dels 4, i el seu cost (${(MATCHES[mi].preu/2).toFixed(2)} €) es repartirà entre tots quatre.`);
-    if(!ok){ renderTable(); return; }
-  }
   // the same person MAY take both seats (e.g. going with a child) —
   // in that case they absorb the full value of the match (two halves).
   if(seat===1) a.s1=val; else a.s2=val;
@@ -782,7 +780,7 @@ function renderBalance(){
       <div class="bname">${names[i]}</div>
       <div class="bstat"><span>Partits</span><span class="v">${partitsTxt}</span></div>
       <div class="bstat"><span>Valor partits</span><span class="v">${s.val.toFixed(2)} €</span></div>
-      ${nobody>0.004?`<div class="bstat"><span>Seients de «Ningú» <span style="font-weight:400;color:var(--muted);font-size:11px">(÷4)</span></span><span class="v">${nobody.toFixed(2)} €</span></div>`:''}
+      ${nobody>0.004?`<div class="bstat"><span>Partits no repartits <span style="font-weight:400;color:var(--muted);font-size:11px">(÷4)</span></span><span class="v">${nobody.toFixed(2)} €</span></div>`:''}
       <div class="bstat"><span>Carnet soci</span><span class="v">${SOCI.toFixed(2)} €</span></div>
       <div class="bstat btotal"><span>TOTAL a pagar</span><span class="v">${total.toFixed(2)} €</span></div>
       ${anySales?`${recov[i]>0.004?`<div class="bstat"><span>Recupera seients venuts <span style="font-weight:400;color:var(--muted);font-size:11px">(${salesN[i]})</span></span><span class="v" style="color:#1a7a4c">−${recov[i].toFixed(2)} €</span></div>`:''}
